@@ -25,11 +25,13 @@ plasmaforge/
 │   │   ├── themes.py               # Discovery, active scheme detection & palette parsing
 │   │   ├── transaction.py          # Reusable transactional safety layer, states & rollback engine
 │   │   ├── color_scheme_applier.py # KDE color scheme applier backed by TransactionalSafetyEngine
+│   │   ├── desktop_layout.py       # Desktop layout model, detection, presets & layout applier
 │   │   └── presets.py              # Curated native desktop recipe catalog
 │   ├── controllers/                # QML presentation singletons (PlasmaForge.Controllers 1.0)
 │   │   ├── app_controller.py       # Active view navigation, safe mode, and status toasts
 │   │   ├── system_controller.py    # Exposes system metrics & KDE tools to QML
 │   │   ├── theme_controller.py     # Scheme selection, diff preview, confirmation & apply workflows
+│   │   ├── desktop_controller.py   # Desktop Builder draft workbench, presets, diffs & safe apply
 │   │   ├── preset_controller.py    # Gallery preset inspector & dry-run diffs
 │   │   ├── backup_controller.py    # Snapshot creation, listing, integrity verification & safe restore
 │   │   └── settings_controller.py  # Preferences & dynamic safe mode toggle
@@ -50,12 +52,12 @@ plasmaforge/
 │       └── views/                  # Section workspace views
 │           ├── OverviewView.qml
 │           ├── ThemeStudioView.qml # Live color scheme inspector, diff drawer & apply confirmation
-│           ├── DesktopBuilderView.qml
+│           ├── DesktopBuilderView.qml# Interactive desktop layout blueprint & workbench
 │           ├── SetupGalleryView.qml
 │           ├── BackupRestoreView.qml# Snapshot manager & transactional restore modal
 │           ├── SettingsView.qml    # Dynamic Safe Mode / Live Mode configuration
 │           └── qmldir
-└── tests/                          # Automated pytest suite (42 tests)
+└── tests/                          # Automated pytest suite (51 tests)
     ├── test_config.py
     ├── test_system_info.py
     ├── test_adapter_boundary.py
@@ -63,13 +65,14 @@ plasmaforge/
     ├── test_themes_and_presets.py
     ├── test_color_scheme_applier.py
     ├── test_transaction_safety.py  # 12 focused transactional apply & rollback tests
-    ├── test_controllers.py
+    ├── test_desktop_builder.py     # 8 focused Desktop Builder models, presets & apply tests
+    ├── test_controllers.py         # App, theme, settings, preset, and desktop controller workflows
     └── test_qml_loading.py
 ```
 
 ---
 
-## Phase 3 Transactional Safety Engine
+## Phase 3 & 4 Transactional Safety Engine
 
 PlasmaForge enforces a reusable, transactional safety boundary across all customization operations:
 
@@ -82,8 +85,8 @@ PlasmaForge enforces a reusable, transactional safety boundary across all custom
    - **Stage 2 (Safe Mode Check)**: Safe Mode is enabled by default. In Safe Mode, operations generate simulated diffs and test snapshots without modifying live system files.
    - **Stage 3 (Pre-Apply Cryptographic Backup)**: In Live Mode, an automatic snapshot is created and its SHA256 hashes are verified on disk before any mutation is attempted. If backup verification fails, the operation aborts immediately.
    - **Stage 4 (Explicit Confirmation)**: Live Mode strictly requires explicit user confirmation via an in-window modal before touching live files.
-   - **Stage 5 (Safe Execution)**: System utilities (e.g. `plasma-apply-colorscheme`) are executed using argument vectors (`shell=False`) with execution timeouts.
-   - **Stage 6 (Post-Apply Verification & Rollback)**: Success is never reported before verification. If the tool crashes, times out, or fails post-apply verification, the engine automatically rolls back `~/.config` to the pre-apply snapshot.
+   - **Stage 5 (Safe Execution)**: System utilities and configuration modifications are executed safely using argument vectors (`shell=False`) or atomic config writes with execution timeouts. `plasmashell` is never terminated or killed automatically.
+   - **Stage 6 (Post-Apply Verification & Rollback)**: Success is never reported before verification. If writing fails or post-apply verification fails, the engine automatically rolls back `~/.config` to the pre-apply snapshot.
 
 3. **Safe Manual Snapshot Restoration**:
    - Snapshot manifests and file SHA256 hashes are verified before restoring. Corrupted or tampered snapshots are refused with clear error explanations.
@@ -108,8 +111,14 @@ PlasmaForge enforces a reusable, transactional safety boundary across all custom
    - **Apply & Restore**: Apply color scheme via `plasma-apply-colorscheme` backed by the `TransactionalSafetyEngine`, with toast notifications and one-click restoration of the previous scheme.
 
 3. **Desktop Builder**:
-   - Interactive schematic preview of the primary Wayland display layout, taskbar, dock, and applet regions.
-   - Staging workbench state: clearly informs the user that widget orchestration and panel restructuring are reserved for later phases.
+   - **Visual 16:9 Display Blueprint**: Interactive representation of current Wayland display output with dynamic rendering of top panel, floating dock, and Nothing-inspired widgets.
+   - **Live Detected vs Editable Draft**: Clearly communicates active detected geometry vs in-memory draft vs applied configuration.
+   - **Sensible Presets**: Includes *Classic KDE* (conventional single bottom taskbar), *Nothing-Inspired* (minimal top status bar + centered bottom dock + widgets), and *Clean Minimal* (auto-hiding distraction-free workspace).
+   - **Granular Controls**: Panel position (top, bottom, none), thickness (24–64px), visibility mode (always visible, auto-hide, dodge windows), dock position, dock thickness, dock icon size, and widget toggles.
+   - **Live-Applicable vs Preview-Only Properties**:
+     - *Live-Applicable*: Panel edge anchor position, thickness, visibility mode, dock edge position (written to `~/.config/plasma-org.kde.plasma.desktop-appletsrc` and verified).
+     - *Preview-Only Simulation*: Custom desktop widget placement coordinates and floating dock margin padding (honestly labeled as visual simulations).
+   - **Safe Apply & Rollback**: Uses `TransactionalSafetyEngine` with pre-apply backup, explicit confirmation, diff preview, verification, and one-click restore. `plasmashell` is never killed.
 
 4. **Setup Gallery**:
    - Curated native desktop presets: *Obsidian Teal Studio*, *Nordic Horizon*, *Arch Minimalist*, and *Paper & Umber Dark*.

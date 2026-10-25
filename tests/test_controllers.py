@@ -10,6 +10,7 @@ from plasmaforge.controllers import (
     SettingsController,
     SystemController,
     ThemeController,
+    DesktopController,
 )
 
 
@@ -113,3 +114,49 @@ def test_theme_controller_workflow(qapp: QGuiApplication) -> None:
     assert ok is True
     assert dry is True  # In safe mode, dry run is True
     assert "Safe Mode" in msg
+
+
+def test_desktop_controller_workflow(qapp: QGuiApplication) -> None:
+    ctrl = DesktopController()
+    assert len(ctrl.presets) == 3
+    assert ctrl.detectedLayout is not None
+    assert ctrl.draftLayout is not None
+    assert ctrl.isDraftModified is False
+
+    # Preset selection
+    ctrl.loadPreset("nothing_inspired")
+    assert ctrl.selectedPresetId == "nothing_inspired"
+    assert ctrl.showWidgets is True
+    assert ctrl.panelPosition == "top"
+    assert ctrl.dockPosition == "bottom"
+    assert ctrl.isDraftModified is True
+
+    # Parameter tweaks
+    ctrl.setPanelThickness(40)
+    assert ctrl.panelThickness == 40
+    ctrl.setDockIconSize(48)
+    assert ctrl.dockIconSize == 48
+
+    # Diff preview
+    diffs = []
+    ctrl.diffPreviewReady.connect(lambda d: diffs.append(d))
+    ctrl.requestDiffPreview()
+    assert len(diffs) == 1
+    assert "Unified Diff Preview" in diffs[0]
+
+    # Modal dialog transitions
+    ctrl.requestApplyDraft()
+    assert ctrl.showConfirmDialog is True
+    ctrl.cancelApply()
+    assert ctrl.showConfirmDialog is False
+
+    # Apply in safe mode
+    results = []
+    ctrl.applyFinished.connect(lambda ok, msg, dry: results.append((ok, msg, dry)))
+    ctrl.confirmApplyDraft()
+    assert len(results) == 1
+    ok, msg, dry = results[0]
+    assert ok is True
+    assert dry is True
+    assert "Safe Mode active" in msg
+

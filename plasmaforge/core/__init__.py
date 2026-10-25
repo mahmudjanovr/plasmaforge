@@ -19,6 +19,13 @@ from plasmaforge.core.transaction import (
     TransactionResult,
     TransactionState,
 )
+from plasmaforge.core.desktop_layout import (
+    DesktopLayout,
+    DesktopLayoutApplier,
+    PanelConfig,
+    detect_desktop_layout,
+    get_layout_presets,
+)
 
 __all__ = [
     "AppConfig",
@@ -40,4 +47,9 @@ __all__ = [
     "TransactionalSafetyEngine",
     "TransactionResult",
     "TransactionState",
+    "DesktopLayout",
+    "DesktopLayoutApplier",
+    "PanelConfig",
+    "detect_desktop_layout",
+    "get_layout_presets",
 ]
