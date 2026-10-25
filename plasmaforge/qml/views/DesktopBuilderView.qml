@@ -21,7 +21,7 @@ ScrollView {
             title: "Desktop Builder"
             subtitle: "Visual desktop workspace for planning, previewing, and managing KDE Plasma 6 panel layouts"
 
-            Flow {
+            RowLayout {
                 spacing: Theme.spaceSm
 
                 PFButton {
@@ -167,13 +167,13 @@ ScrollView {
                         Grid {
                             anchors.centerIn: parent
                             columns: 6
-                            spacing: 36
+                            spacing: Math.max(12, Math.min(36, Math.round(parent.width * 0.05)))
                             opacity: 0.12
                             Repeater {
                                 model: 18
                                 delegate: Rectangle {
-                                    width: 44
-                                    height: 28
+                                    width: Math.max(20, Math.min(44, Math.round(screenArea.width * 0.08)))
+                                    height: Math.max(14, Math.min(28, Math.round(screenArea.height * 0.09)))
                                     color: "transparent"
                                     border.color: Theme.accentLight
                                     border.width: 1
@@ -185,11 +185,19 @@ ScrollView {
                         // Optional Desktop Widgets Representation (e.g. Nothing-inspired clock & stats)
                         Rectangle {
                             visible: DesktopCtrl.showWidgets
-                            anchors.left: parent.left
-                            anchors.leftMargin: 28
+                            x: {
+                                var base = Math.max(16, Math.round(parent.width * 0.05))
+                                if (DesktopCtrl.panelPosition === "left") {
+                                    base = Math.max(base, visualTopPanel.width + 12)
+                                }
+                                if (DesktopCtrl.dockPosition === "left") {
+                                    base = Math.max(base, visualDock.x + visualDock.width + 12)
+                                }
+                                return base
+                            }
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 140
-                            height: 84
+                            width: Math.max(100, Math.min(140, Math.round(parent.width * 0.28)))
+                            height: Math.max(64, Math.min(84, Math.round(parent.height * 0.3)))
                             radius: Theme.radiusMd
                             color: Qt.rgba(0.08, 0.09, 0.12, 0.75)
                             border.color: Qt.rgba(1, 1, 1, 0.12)
@@ -225,21 +233,26 @@ ScrollView {
                             }
                         }
 
-                        // Top Panel Representation
+                        // Top/Edge Panel Representation
                         Rectangle {
                             id: visualTopPanel
                             visible: DesktopCtrl.panelPosition !== "none"
-                            anchors.top: DesktopCtrl.panelPosition === "top" ? parent.top : undefined
-                            anchors.bottom: DesktopCtrl.panelPosition === "bottom" ? parent.bottom : undefined
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            height: Math.max(18, Math.min(42, Math.round(DesktopCtrl.panelThickness * 0.7)))
+                            readonly property bool isHorizontal: DesktopCtrl.panelPosition === "top" || DesktopCtrl.panelPosition === "bottom"
+                            readonly property int panelThicknessPx: Math.max(16, Math.min(Math.round(parent.height * 0.14), Math.round(DesktopCtrl.panelThickness * (parent.height / 540))))
+
+                            x: DesktopCtrl.panelPosition === "right" ? (parent.width - width) : 0
+                            y: DesktopCtrl.panelPosition === "bottom" ? (parent.height - height) : (isHorizontal ? 0 : Math.round((parent.height - height) / 2))
+                            width: isHorizontal ? parent.width : panelThicknessPx
+                            height: isHorizontal ? panelThicknessPx : Math.max(80, Math.min(Math.round(parent.height * 0.38), 160))
+
                             color: Qt.rgba(0.09, 0.10, 0.14, 0.92)
                             border.color: Qt.rgba(1, 1, 1, 0.08)
                             border.width: 1
                             z: 10
+                            clip: true
 
                             RowLayout {
+                                visible: visualTopPanel.isHorizontal
                                 anchors.fill: parent
                                 anchors.leftMargin: 10
                                 anchors.rightMargin: 10
@@ -247,7 +260,7 @@ ScrollView {
 
                                 // App launcher icon
                                 Rectangle {
-                                    width: visualTopPanel.height * 0.55
+                                    width: Math.max(10, Math.round(visualTopPanel.height * 0.55))
                                     height: width
                                     radius: 3
                                     color: Theme.accent
@@ -259,6 +272,7 @@ ScrollView {
                                     font.pixelSize: 9
                                     font.weight: Font.DemiBold
                                     color: Theme.textSecondary
+                                    visible: visualTopPanel.width > 220
                                 }
 
                                 Item { Layout.fillWidth: true }
@@ -279,7 +293,7 @@ ScrollView {
                                     Repeater {
                                         model: 4
                                         delegate: Rectangle {
-                                            width: visualTopPanel.height * 0.4
+                                            width: Math.max(6, Math.round(visualTopPanel.height * 0.4))
                                             height: width
                                             radius: 2
                                             color: Qt.rgba(1, 1, 1, 0.25)
@@ -292,34 +306,94 @@ ScrollView {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 8
                                     color: Theme.accentLight
+                                    visible: visualTopPanel.width > 360
+                                }
+                            }
+
+                            ColumnLayout {
+                                visible: !visualTopPanel.isHorizontal
+                                anchors.fill: parent
+                                anchors.topMargin: 8
+                                anchors.bottomMargin: 8
+                                spacing: 6
+
+                                Rectangle {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    width: Math.max(10, Math.round(visualTopPanel.width * 0.55))
+                                    height: width
+                                    radius: 2
+                                    color: Theme.accent
+                                }
+
+                                Item { Layout.fillHeight: true }
+
+                                ColumnLayout {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    spacing: 3
+                                    Repeater {
+                                        model: 3
+                                        delegate: Rectangle {
+                                            width: Math.max(6, Math.round(visualTopPanel.width * 0.35))
+                                            height: width
+                                            radius: 1
+                                            color: Qt.rgba(1, 1, 1, 0.25)
+                                        }
+                                    }
                                 }
                             }
                         }
 
-                        // Bottom Dock Representation
+                        // Bottom/Edge Dock Representation
                         Rectangle {
                             id: visualDock
                             visible: DesktopCtrl.dockPosition !== "none"
-                            anchors.bottom: DesktopCtrl.dockPosition === "bottom" ? parent.bottom : undefined
-                            anchors.top: DesktopCtrl.dockPosition === "top" ? parent.top : undefined
-                            anchors.bottomMargin: DesktopCtrl.panelPosition === "bottom" ? (visualTopPanel.height + 6) : 8
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: Math.max(160, Math.min(screenArea.width * 0.65, 340))
-                            height: Math.max(26, Math.min(54, Math.round(DesktopCtrl.dockThickness * 0.72)))
-                            radius: height / 2
+                            readonly property bool isHorizontal: DesktopCtrl.dockPosition === "bottom" || DesktopCtrl.dockPosition === "top"
+                            readonly property int dockThicknessPx: Math.max(22, Math.min(Math.round(parent.height * 0.16), Math.round(DesktopCtrl.dockThickness * (parent.height / 500))))
+                            readonly property int dockLengthPx: isHorizontal
+                                ? Math.max(140, Math.min(Math.round(parent.width * 0.65), 330))
+                                : Math.max(80, Math.min(Math.round(parent.height * 0.38), 160))
+
+                            width: isHorizontal ? dockLengthPx : dockThicknessPx
+                            height: isHorizontal ? dockThicknessPx : dockLengthPx
+                            radius: Math.round(Math.min(width, height) / 2)
+
+                            x: {
+                                if (DesktopCtrl.dockPosition === "left") {
+                                    return (DesktopCtrl.panelPosition === "left" ? (visualTopPanel.width + 6) : 8)
+                                }
+                                if (DesktopCtrl.dockPosition === "right") {
+                                    var offR = (DesktopCtrl.panelPosition === "right" ? (visualTopPanel.width + 6) : 8)
+                                    return parent.width - width - offR
+                                }
+                                return Math.round((parent.width - width) / 2)
+                            }
+
+                            y: {
+                                if (DesktopCtrl.dockPosition === "top") {
+                                    return (DesktopCtrl.panelPosition === "top" ? (visualTopPanel.height + 6) : 8)
+                                }
+                                if (DesktopCtrl.dockPosition === "bottom") {
+                                    var offB = (DesktopCtrl.panelPosition === "bottom" ? (visualTopPanel.height + 6) : 8)
+                                    return parent.height - height - offB
+                                }
+                                return Math.round((parent.height - height) / 2)
+                            }
+
                             color: Qt.rgba(0.08, 0.09, 0.13, 0.94)
                             border.color: Qt.rgba(0.08, 0.72, 0.65, 0.45)
                             border.width: 1
                             z: 20
+                            clip: true
 
                             RowLayout {
+                                visible: visualDock.isHorizontal
                                 anchors.centerIn: parent
                                 spacing: 10
 
                                 Repeater {
                                     model: 6
                                     delegate: Rectangle {
-                                        width: Math.max(16, Math.min(32, Math.round(DesktopCtrl.dockIconSize * 0.55)))
+                                        width: Math.max(14, Math.min(28, Math.round(DesktopCtrl.dockIconSize * 0.55)))
                                         height: width
                                         radius: 6
                                         color: index === 0 ? Theme.accent : (index === 1 ? "#3b82f6" : (index === 2 ? "#eab308" : Qt.rgba(1, 1, 1, 0.22)))
@@ -335,6 +409,22 @@ ScrollView {
                                             color: Theme.accentLight
                                             visible: index < 3
                                         }
+                                    }
+                                }
+                            }
+
+                            ColumnLayout {
+                                visible: !visualDock.isHorizontal
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                Repeater {
+                                    model: 4
+                                    delegate: Rectangle {
+                                        width: Math.max(14, Math.min(28, Math.round(DesktopCtrl.dockIconSize * 0.55)))
+                                        height: width
+                                        radius: 6
+                                        color: index === 0 ? Theme.accent : (index === 1 ? "#3b82f6" : (index === 2 ? "#eab308" : Qt.rgba(1, 1, 1, 0.22)))
                                     }
                                 }
                             }

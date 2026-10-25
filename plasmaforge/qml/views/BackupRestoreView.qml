@@ -121,7 +121,9 @@ ScrollView {
             // Left: Snapshots List Card
             PFCard {
                 Layout.fillWidth: true
-                Layout.preferredWidth: backupRoot.width > 900 ? 420 : 1
+                Layout.preferredWidth: backupRoot.width > 900 ? 380 : -1
+                Layout.maximumWidth: backupRoot.width > 900 ? 460 : -1
+                Layout.minimumWidth: 0
                 implicitHeight: 520
 
                 ColumnLayout {
@@ -358,6 +360,8 @@ ScrollView {
             // Right: Selected Snapshot Detail & Dry-Run Diff Card
             PFCard {
                 Layout.fillWidth: true
+                Layout.preferredWidth: backupRoot.width > 900 ? 580 : -1
+                Layout.minimumWidth: 0
                 implicitHeight: 520
 
                 ColumnLayout {
@@ -380,6 +384,8 @@ ScrollView {
                                 font.pixelSize: Theme.fontSizeLg
                                 font.weight: Font.DemiBold
                                 color: Theme.textPrimary
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
                             }
 
                             Text {
@@ -396,7 +402,7 @@ ScrollView {
                     }
 
                     // Action Buttons Bar: Verify, Diff, Restore, and Delete
-                    RowLayout {
+                    Flow {
                         Layout.fillWidth: true
                         spacing: Theme.spaceSm
 
@@ -422,8 +428,6 @@ ScrollView {
                                 AppCtrl.showToast("Dry-run comparison against live files updated.", "info")
                             }
                         }
-
-                        Item { Layout.fillWidth: true }
 
                         PFButton {
                             text: "Restore Snapshot"

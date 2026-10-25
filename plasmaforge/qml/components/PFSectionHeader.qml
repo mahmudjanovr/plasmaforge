@@ -9,12 +9,16 @@ Item {
     property string subtitle: ""
     default property alias actions: actionContainer.children
 
+    Layout.fillWidth: true
     implicitWidth: parent ? parent.width : 400
-    implicitHeight: 48
+    implicitHeight: Math.max(48, headerLayout.implicitHeight)
 
-    RowLayout {
+    GridLayout {
+        id: headerLayout
         anchors.fill: parent
-        spacing: Theme.spaceLg
+        columns: headerRoot.width > 760 ? 2 : 1
+        columnSpacing: Theme.spaceLg
+        rowSpacing: Theme.spaceSm
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -26,6 +30,8 @@ Item {
                 font.pixelSize: Theme.fontSizeLg
                 font.weight: Font.DemiBold
                 color: Theme.textPrimary
+                elide: Text.ElideRight
+                Layout.fillWidth: true
             }
 
             Text {
@@ -34,12 +40,15 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSm
                 color: Theme.textSecondary
+                elide: Text.ElideRight
+                Layout.fillWidth: true
             }
         }
 
         RowLayout {
             id: actionContainer
             spacing: Theme.spaceSm
+            Layout.alignment: headerRoot.width > 760 ? (Qt.AlignRight | Qt.AlignVCenter) : Qt.AlignLeft
         }
     }
 }

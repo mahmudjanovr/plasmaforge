@@ -1,6 +1,4 @@
-"""Integration test verifying full QML scene graph loading and view instantiations."""
-
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QColor, QGuiApplication
 import pytest
 
 from plasmaforge.main import create_application
@@ -85,5 +83,96 @@ def test_qml_full_startup(qapp: QGuiApplication) -> None:
     for sec in sections:
         app_ctrl.navigateTo(sec)
         app.processEvents()
+
+    # Desktop Builder Blueprint & Header Regression Checks
+    app_ctrl.navigateTo("Desktop Builder")
+    for _ in range(8):
+        app.processEvents()
+
+    # Test position toggling (which previously triggered anchor overlap and huge circle capsule)
+    desktop_ctrl.setDockPosition("top")
+    desktop_ctrl.setDockPosition("bottom")
+    desktop_ctrl.setPanelPosition("bottom")
+    desktop_ctrl.setPanelPosition("top")
+    for _ in range(8):
+        app.processEvents()
+
+    def find_screen(it):
+        if it.metaObject().className().startswith("QQuickRectangle"):
+            col = it.property("color")
+            if isinstance(col, QColor) and col.name() == "#12141a":
+                return it
+        for ch in it.childItems():
+            r = find_screen(ch)
+            if r is not None:
+                return r
+        return None
+
+    screen_rect = find_screen(window.contentItem())
+    assert screen_rect is not None, "Desktop Builder monitor preview screenArea should exist"
+    sw = screen_rect.width()
+    sh = screen_rect.height()
+    assert sw > 200 and sh > 100
+
+    panel_item = None
+    dock_item = None
+    for ch in screen_rect.childItems():
+        if not ch.isVisible():
+            continue
+        if int(ch.z()) == 10:
+            panel_item = ch
+        elif int(ch.z()) == 20:
+            dock_item = ch
+
+    assert panel_item is not None, "visualTopPanel must exist"
+    assert dock_item is not None, "visualDock must exist"
+    # Neither panel nor dock should balloon to fill the screen or exceed 40% height
+    assert panel_item.height() <= sh * 0.4, f"Panel height {panel_item.height()} exceeded 40% of {sh}"
+    assert dock_item.height() <= sh * 0.4, f"Dock height {dock_item.height()} exceeded 40% of {sh}"
+    assert dock_item.property("radius") <= (dock_item.height() / 2) + 1.0, "Dock radius must be bounded by half-height"
+
+    # Header action button should stay within window bounds across widths
+    for test_w in [1100, 880, 800]:
+        window.setProperty("width", test_w)
+        for _ in range(8):
+            app.processEvents()
+
+        def find_btn(it, text):
+            if it.property("text") == text:
+                return it
+            for ch in it.childItems():
+                r = find_btn(ch, text)
+                if r is not None:
+                    return r
+            return None
+
+        apply_btn = find_btn(window.contentItem(), "Apply Layout")
+        assert apply_btn is not None
+        btn_scene_r = apply_btn.mapRectToScene(apply_btn.boundingRect()).right()
+        assert btn_scene_r <= test_w + 1.0, f"Apply Layout button right {btn_scene_r} overflowed window width {test_w}"
+
+    # Backups & Restore Two-Column Layout Regression Checks
+    window.setProperty("width", 1400)
+    window.setProperty("height", 860)
+    app_ctrl.navigateTo("Backups & Restore")
+    for _ in range(8):
+        app.processEvents()
+
+    def find_cards(it, cards=None):
+        if cards is None:
+            cards = []
+        if "PFCard" in it.metaObject().className():
+            cards.append(it)
+        for ch in it.childItems():
+            find_cards(ch, cards)
+        return cards
+
+    cards = find_cards(window.contentItem())
+    large_cards = [c for c in cards if c.width() > 300 and c.height() > 400]
+    # Both snapshots list card and detail diff card must be allocated proper widths in two-column mode
+    assert len(large_cards) >= 2, f"Expected at least 2 large cards in 2-column mode, found {len(large_cards)}"
+    for card in large_cards[:2]:
+        assert card.width() >= 350, f"Card width {card.width()} was too narrow (collapsed column defect)"
+
 
 
