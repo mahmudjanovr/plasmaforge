@@ -1,0 +1,17 @@
+[project]
+name = "plasmaforge"
+version = "0.1.0"
+description = "Native Linux desktop customization studio for KDE Plasma 6"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6>=6.6.0",
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
