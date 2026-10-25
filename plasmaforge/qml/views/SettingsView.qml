@@ -41,44 +41,55 @@ ScrollView {
                         width: 36
                         height: 36
                         radius: Theme.radiusMd
-                        color: Qt.rgba(0.06, 0.73, 0.51, 0.15)
-                        border.color: Theme.success
+                        color: SettingsCtrl.safeMode ? Qt.rgba(0.06, 0.73, 0.51, 0.15) : Qt.rgba(0.96, 0.62, 0.04, 0.15)
+                        border.color: SettingsCtrl.safeMode ? Theme.success : Theme.warning
                         border.width: 1
 
                         Text {
                             anchors.centerIn: parent
-                            text: "🛡"
+                            text: SettingsCtrl.safeMode ? "🛡" : "⚡"
                             font.pixelSize: 18
                         }
                     }
 
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 1
+                        spacing: 2
 
                         RowLayout {
                             spacing: Theme.spaceSm
                             Text {
-                                text: "Phase 1 Safety Mode"
+                                text: SettingsCtrl.safeMode ? "Safe Mode (Simulation Only)" : "Live Mode (KDE Desktop Customization)"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeMd
                                 font.weight: Font.DemiBold
                                 color: Theme.textPrimary
                             }
                             PFBadge {
-                                text: "LOCKED ACTIVE"
-                                variant: "success"
+                                text: SettingsCtrl.safeMode ? "PROTECTED" : "LIVE CUSTOMIZATION"
+                                variant: SettingsCtrl.safeMode ? "success" : "warning"
                                 size: "xs"
                             }
                         }
 
                         Text {
-                            text: "Direct modification of ~/.config files is strictly prohibited. All presets and theme changes execute through the DryRunAdapter."
+                            text: SettingsCtrl.safeMode
+                                ? "All theme applications and changesets are simulated. No live ~/.config files are mutated."
+                                : "Color scheme changes will be applied directly to your active KDE Plasma 6 desktop session. Automatic pre-apply backups are always created before any modification."
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeSm
                             color: Theme.textSecondary
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
+                        }
+                    }
+
+                    PFButton {
+                        text: SettingsCtrl.safeMode ? "Switch to Live Mode" : "Switch to Safe Mode"
+                        variant: SettingsCtrl.safeMode ? "warning" : "primary"
+                        size: "md"
+                        onClicked: {
+                            SettingsCtrl.setSafeMode(!SettingsCtrl.safeMode)
                         }
                     }
                 }

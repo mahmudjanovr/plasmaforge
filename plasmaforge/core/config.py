@@ -29,7 +29,6 @@ def get_default_backup_dir() -> Path:
 class AppConfig:
     """Runtime configuration for PlasmaForge."""
 
-    # Phase 1 safety flag: safe_mode is strictly enforced
     safe_mode: bool = True
     dry_run: bool = True
     backup_dir: str = ""
@@ -38,6 +37,8 @@ class AppConfig:
     window_width: int = 1080
     window_height: int = 720
     auto_backup_on_preview: bool = True
+    last_backup_id: str = ""
+    previous_scheme_id: str = ""
 
     def __post_init__(self) -> None:
         if not self.backup_dir:
@@ -57,10 +58,10 @@ class AppConfig:
             "window_width",
             "window_height",
             "auto_backup_on_preview",
+            "last_backup_id",
+            "previous_scheme_id",
         }
         filtered = {k: v for k, v in data.items() if k in allowed}
-        # In Phase 1, enforce safe_mode = True regardless of file content
-        filtered["safe_mode"] = True
         return cls(**filtered)
 
 

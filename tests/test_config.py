@@ -16,11 +16,19 @@ def test_default_config() -> None:
     assert "snapshots" in config.backup_dir
 
 
-def test_safe_mode_strictly_enforced() -> None:
-    # Attempt to bypass safe_mode via dictionary
-    config = AppConfig.from_dict({"safe_mode": False, "theme_mode": "light"})
+def test_safe_mode_defaults_and_explicit_toggle() -> None:
+    # Safe mode defaults to True
+    config = AppConfig()
     assert config.safe_mode is True
-    assert config.theme_mode == "light"
+
+    # When omitted from dict, safe_mode defaults to True
+    loaded_default = AppConfig.from_dict({"theme_mode": "light"})
+    assert loaded_default.safe_mode is True
+
+    # Can be explicitly configured
+    loaded_live = AppConfig.from_dict({"safe_mode": False, "theme_mode": "light"})
+    assert loaded_live.safe_mode is False
+    assert loaded_live.theme_mode == "light"
 
 
 def test_save_and_load_config(tmp_path: Path) -> None:

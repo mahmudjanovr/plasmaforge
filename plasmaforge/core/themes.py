@@ -4,9 +4,87 @@ from __future__ import annotations
 
 import configparser
 import json
+import os
+import re
+import shutil
+import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
+
+
+def detect_active_color_scheme(kdeglobals_path: Optional[Path] = None) -> str:
+    """Safely detect the currently active KDE color scheme."""
+    # When an explicit path is provided (e.g. testing or custom root), check it first
+    if kdeglobals_path and kdeglobals_path.is_file():
+        try:
+            cfg = configparser.ConfigParser(interpolation=None)
+            cfg.optionxform = str
+            cfg.read(kdeglobals_path, encoding="utf-8")
+            if cfg.has_section("General"):
+                cs = cfg.get("General", "ColorScheme", fallback="")
+                if cs:
+                    return cs
+            if cfg.has_section("KDE"):
+                laf = cfg.get("KDE", "LookAndFeelPackage", fallback="")
+                if laf:
+                    return laf
+        except Exception:
+            pass
+
+    # First priority for live desktop: ask plasma-apply-colorscheme -l if available
+    bin_path = shutil.which("plasma-apply-colorscheme")
+    if bin_path:
+        try:
+            res = subprocess.run(
+                [bin_path, "-l"],
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+            for line in res.stdout.splitlines():
+                if "(current color scheme)" in line:
+                    match = re.search(r"\*\s+([A-Za-z0-9_.\-]+)", line)
+                    if match:
+                        return match.group(1).strip()
+        except Exception:
+            pass
+
+    # Second priority: read ColorScheme via kreadconfig6
+    kread = shutil.which("kreadconfig6")
+    if kread:
+        try:
+            res = subprocess.run(
+                [kread, "--file", "kdeglobals", "--group", "General", "--key", "ColorScheme"],
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+            val = res.stdout.strip()
+            if val:
+                return val
+        except Exception:
+            pass
+
+    # Third priority: parse live ~/.config/kdeglobals directly
+    path = kdeglobals_path or (Path.home() / ".config" / "kdeglobals")
+    if path.is_file():
+        try:
+            cfg = configparser.ConfigParser(interpolation=None)
+            cfg.optionxform = str
+            cfg.read(path, encoding="utf-8")
+            if cfg.has_section("General"):
+                cs = cfg.get("General", "ColorScheme", fallback="")
+                if cs:
+                    return cs
+            if cfg.has_section("KDE"):
+                laf = cfg.get("KDE", "LookAndFeelPackage", fallback="")
+                if laf:
+                    return laf
+        except Exception:
+            pass
+
+    return "BreezeDark"
 
 
 def _rgb_to_hex(rgb_str: Optional[str], default: str = "#202328") -> str:
@@ -41,6 +119,7 @@ class ColorSchemeInfo:
     selection_fg: str
     button_bg: str
     button_fg: str
+    is_active: bool = False
 
     def to_dict(self) -> Dict[str, object]:
         return asdict(self)
@@ -74,10 +153,15 @@ class ThemeInspector:
             Path("/usr/share/plasma/desktoptheme"),
         ]
 
+    def get_active_scheme_id(self) -> str:
+        """Return the ID of the currently active KDE color scheme."""
+        return detect_active_color_scheme()
+
     def get_color_schemes(self) -> List[ColorSchemeInfo]:
         """Discover and parse installed color schemes."""
         schemes: List[ColorSchemeInfo] = []
         seen_names = set()
+        active_id = self.get_active_scheme_id()
 
         for directory in self.scheme_dirs:
             if not directory.is_dir():
@@ -131,6 +215,16 @@ class ThemeInspector:
                         "#e0e2e6",
                     )
 
+                    is_active = bool(
+                        active_id
+                        and (
+                            path.stem == active_id
+                            or name == active_id
+                            or path.stem.lower() == active_id.lower()
+                            or name.lower() == active_id.lower()
+                        )
+                    )
+
                     schemes.append(
                         ColorSchemeInfo(
                             id=path.stem,
@@ -145,6 +239,7 @@ class ThemeInspector:
                             selection_fg=sel_fg,
                             button_bg=btn_bg,
                             button_fg=btn_fg,
+                            is_active=is_active,
                         )
                     )
                 except Exception:

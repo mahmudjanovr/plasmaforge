@@ -206,11 +206,11 @@ ApplicationWindow {
                                 width: 8
                                 height: 8
                                 radius: 4
-                                color: Theme.success
+                                color: AppCtrl.safeMode ? Theme.success : Theme.warning
                             }
 
                             Text {
-                                text: "Safe Sandbox Active"
+                                text: AppCtrl.safeMode ? "Safe Sandbox Active" : "Live Mode Active"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeSm
                                 font.weight: Font.DemiBold
@@ -283,8 +283,8 @@ ApplicationWindow {
                     }
 
                     PFBadge {
-                        text: "Safe Mode"
-                        variant: "accent"
+                        text: AppCtrl.safeMode ? "Safe Mode" : "Live Mode"
+                        variant: AppCtrl.safeMode ? "accent" : "warning"
                         size: "sm"
                     }
 

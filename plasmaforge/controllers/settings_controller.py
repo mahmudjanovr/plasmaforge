@@ -11,16 +11,25 @@ class SettingsController(QObject):
     """Coordinates application preferences and enforces Phase 1 safety restrictions."""
 
     settingsChanged = Signal()
+    safeModeChanged = Signal()
     saveNotification = Signal(str, bool)
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._config: AppConfig = get_config()
 
-    @Property(bool, constant=True)
+    @Property(bool, notify=safeModeChanged)
     def safeMode(self) -> bool:
-        # Phase 1: Always True, cannot be disabled via UI
-        return True
+        return self._config.safe_mode
+
+    @Slot(bool)
+    def setSafeMode(self, enabled: bool) -> None:
+        if self._config.safe_mode != enabled:
+            self._config.safe_mode = enabled
+            save_config(self._config)
+            self.safeModeChanged.emit()
+            msg = "Safe Mode activated (simulations only)." if enabled else "Live Mode activated: desktop changes will be applied directly."
+            self.saveNotification.emit(msg, True)
 
     @Property(bool, notify=settingsChanged)
     def dryRun(self) -> bool:

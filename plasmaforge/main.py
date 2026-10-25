@@ -57,6 +57,24 @@ def create_application(argv: list[str] | None = None) -> tuple[QGuiApplication, 
     qmlRegisterSingletonInstance(BackupController, CONTROLLERS_URI, 1, 0, "BackupCtrl", backup_ctrl)
     qmlRegisterSingletonInstance(SettingsController, CONTROLLERS_URI, 1, 0, "SettingsCtrl", settings_ctrl)
 
+    # Wire safe mode synchronization & toasts
+    app_ctrl.setSafeMode(settings_ctrl.safeMode)
+    settings_ctrl.safeModeChanged.connect(
+        lambda: app_ctrl.setSafeMode(settings_ctrl.safeMode)
+    )
+    theme_ctrl.applyFinished.connect(
+        lambda ok, msg, dry: (
+            system_ctrl.refresh(),
+            app_ctrl.showToast(msg, "info" if dry else ("success" if ok else "error")),
+        )
+    )
+    theme_ctrl.restoreFinished.connect(
+        lambda ok, msg: (
+            system_ctrl.refresh(),
+            app_ctrl.showToast(msg, "success" if ok else "error"),
+        )
+    )
+
     engine = QQmlApplicationEngine()
 
     # Add QML import paths

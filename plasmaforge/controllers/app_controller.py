@@ -11,6 +11,7 @@ class AppController(QObject):
     """Main application navigation and global state coordinator."""
 
     activeSectionChanged = Signal(str)
+    safeModeChanged = Signal(bool)
     statusToastRequested = Signal(str, str)  # message, level
 
     def __init__(self, parent: QObject | None = None) -> None:
@@ -32,9 +33,15 @@ class AppController(QObject):
     def appVersion(self) -> str:
         return self._app_version
 
-    @Property(bool, constant=True)
+    @Property(bool, notify=safeModeChanged)
     def safeMode(self) -> bool:
         return self._safe_mode
+
+    @Slot(bool)
+    def setSafeMode(self, enabled: bool) -> None:
+        if self._safe_mode != enabled:
+            self._safe_mode = enabled
+            self.safeModeChanged.emit(enabled)
 
     @Slot(str)
     def navigateTo(self, section: str) -> None:

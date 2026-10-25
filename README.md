@@ -6,7 +6,7 @@ PlasmaForge is a high-performance, dark-first desktop customization studio engin
 
 ---
 
-## Architecture & Design (Phase 1)
+## Architecture & Design (Phase 2)
 
 PlasmaForge follows a strict separation of concerns between native presentation, application state, and configuration safety boundaries:
 
@@ -21,18 +21,19 @@ plasmaforge/
 │   │   ├── config.py               # XDG-compliant app configuration (~/.config/plasmaforge)
 │   │   ├── system_info.py          # Read-only detection of KDE Plasma 6 and host environment
 │   │   ├── adapter_boundary.py     # Safe configuration change contract & DryRunAdapter
-│   │   ├── backup_manager.py       # Sandboxed cryptographic snapshots (SHA256 manifests)
-│   │   ├── themes.py               # Discovery & palette parsing for installed color schemes
+│   │   ├── backup_manager.py       # Sandboxed cryptographic snapshots (SHA256 manifests & restore)
+│   │   ├── themes.py               # Discovery, active scheme detection & palette parsing
+│   │   ├── color_scheme_applier.py # Safe KDE color scheme applier with rollback & diff preview
 │   │   └── presets.py              # Curated native desktop recipe catalog
 │   ├── controllers/                # QML presentation singletons (PlasmaForge.Controllers 1.0)
-│   │   ├── app_controller.py       # Active view navigation and status toasts
+│   │   ├── app_controller.py       # Active view navigation, safe mode, and status toasts
 │   │   ├── system_controller.py    # Exposes system metrics & KDE tools to QML
-│   │   ├── theme_controller.py     # Color scheme selection & preview bindings
+│   │   ├── theme_controller.py     # Scheme selection, diff preview, confirmation & apply workflows
 │   │   ├── preset_controller.py    # Gallery preset inspector & dry-run diffs
 │   │   ├── backup_controller.py    # Snapshot creation, listing, integrity verification
-│   │   └── settings_controller.py  # Preferences & safety mode enforcement
+│   │   └── settings_controller.py  # Preferences & dynamic safe mode toggle
 │   └── qml/                        # Qt Quick presentation layer
-│       ├── main.qml                # Main application window & sidebar shell
+│       ├── main.qml                # Main application window, sidebar shell & modal overlays
 │       ├── theme/                  # Design tokens singleton (dark-first, teal accents)
 │       │   ├── Theme.qml
 │       │   └── qmldir
@@ -47,32 +48,35 @@ plasmaforge/
 │       │   └── qmldir
 │       └── views/                  # Section workspace views
 │           ├── OverviewView.qml
-│           ├── ThemeStudioView.qml
+│           ├── ThemeStudioView.qml # Live color scheme inspector, diff drawer & apply confirmation
 │           ├── DesktopBuilderView.qml
 │           ├── SetupGalleryView.qml
 │           ├── BackupRestoreView.qml
-│           ├── SettingsView.qml
+│           ├── SettingsView.qml    # Dynamic Safe Mode / Live Mode configuration
 │           └── qmldir
-└── tests/                          # Automated pytest suite (22 tests)
+└── tests/                          # Automated pytest suite (30 tests)
     ├── test_config.py
     ├── test_system_info.py
     ├── test_adapter_boundary.py
     ├── test_backup_manager.py
     ├── test_themes_and_presets.py
+    ├── test_color_scheme_applier.py
     ├── test_controllers.py
     └── test_qml_loading.py
 ```
 
 ---
 
-## Safety Foundation
+## Safety Foundation & Phase 2 Architecture
 
-PlasmaForge Phase 1 is built around non-destructive, read-only principles:
+PlasmaForge is designed so that users never unknowingly mutate their live desktop:
 
-- **Zero Unauthorized Modifications**: Direct writing to the user's live `~/.config` files is strictly blocked in Phase 1.
-- **Strict Identifier Whitelisting**: Configuration modifications must target explicitly whitelisted KDE files (`kdeglobals`, `plasmarc`, `plasma-org.kde.plasma.desktop-appletsrc`, `kwinrc`, `kglobalshortcutsrc`). Newline injection and shell escapes are prevented by strict regex pattern validation.
-- **DryRunAdapter Contract**: Preset applications generate unified diffs and previews without writing to disk. Attempting to apply live changes while `safe_mode` is active raises a `SafetyViolationError`.
-- **Cryptographic Backups**: The snapshot engine creates versioned copies in `~/.local/share/plasmaforge/snapshots/` accompanied by a `manifest.json` containing SHA256 checksums. Restore checks run in dry-run mode to display differences against live configurations without altering them.
+- **Explicit Safe Mode (Default)**: Safe Mode is enabled by default. While active, all theme applications simulate changes, generating real unified diffs and verified snapshots without modifying live KDE configurations.
+- **Pre-Apply Cryptographic Backups**: Before applying any scheme in Live Mode, PlasmaForge creates a full cryptographic snapshot of `kdeglobals` and verifies its SHA256 integrity on disk before executing any tool.
+- **Strict Input Validation & Whitelisting**: Color scheme identifiers must match alphanumeric/standard name characters (`[a-zA-Z0-9_-]+`) and exist in the discovered installed schemes list.
+- **No Shell Execution**: System commands are invoked strictly using vector arguments (`subprocess.run(["plasma-apply-colorscheme", scheme_id], shell=False)`) with a 15-second execution timeout.
+- **Automatic Failure Rollback**: If `plasma-apply-colorscheme` exits non-zero or times out, the applier immediately rolls back `kdeglobals` from the verified pre-apply snapshot and reports a meaningful error.
+- **One-Click Restore**: The UI retains the pre-apply snapshot ID and previous scheme name, allowing users to instantly restore their previous color scheme with SHA256 integrity verification.
 
 ---
 
@@ -80,18 +84,20 @@ PlasmaForge Phase 1 is built around non-destructive, read-only principles:
 
 1. **Overview**:
    - Live system inspection: KDE Plasma version, Qt version, Wayland session type, active Look & Feel theme, and system fonts.
-   - Real-time diagnostic indicators for core KDE Plasma 6 binaries (`plasmashell`, `kwriteconfig6`, `kreadconfig6`, `qdbus6`).
-   - Quick safety metrics and snapshot overview.
+   - Real-time diagnostic indicators for core KDE Plasma 6 binaries (`plasmashell`, `plasma-apply-colorscheme`, `kwriteconfig6`, `kreadconfig6`, `qdbus6`).
+   - Quick safety metrics, active mode status badge, and snapshot counts.
 
 2. **Theme Studio**:
-   - Safe inspection of installed color schemes from `/usr/share/color-schemes/` and `~/.local/share/color-schemes/`.
-   - Live palette role swatches (Window BG/FG, View BG/FG, Selection, Buttons).
-   - Discovery of installed Plasma desktop themes (desktop styles).
-   - Realistic read-only staging indicator: explains safe inspection mode without pretending live edits take place.
+   - Live discovery of installed color schemes from `/usr/share/color-schemes/` and `~/.local/share/color-schemes/`.
+   - Palette role swatches (Window BG/FG, View BG/FG, Selection, Buttons).
+   - Dynamic Active Scheme detection (displays an "Active" badge and disables re-applying identical themes).
+   - **Preview Changes (Diff)**: Slide-out drawer displaying an exact unified diff of `kdeglobals` prior to application.
+   - **Confirmation Modal**: Clear in-window confirmation identifying the selected scheme, backup location, and active execution mode (Safe Mode vs Live Mode).
+   - **Apply & Restore**: Apply color scheme via `plasma-apply-colorscheme`, with toast notifications and one-click restoration of the previous scheme.
 
 3. **Desktop Builder**:
    - Interactive schematic preview of the primary Wayland display layout, taskbar, dock, and applet regions.
-   - Staging workbench state: clearly informs the user that widget orchestration and panel restructuring are reserved for Phase 2 once adapter verification is certified.
+   - Staging workbench state: clearly informs the user that widget orchestration and panel restructuring are reserved for later phases.
 
 4. **Setup Gallery**:
    - Curated native desktop presets: *Obsidian Teal Studio*, *Nordic Horizon*, *Arch Minimalist*, and *Paper & Umber Dark*.
@@ -102,10 +108,10 @@ PlasmaForge Phase 1 is built around non-destructive, read-only principles:
    - Versioned snapshot creation of critical KDE Plasma configuration files.
    - List of stored snapshots with timestamp, file count, and size in KB.
    - Cryptographic SHA256 integrity verification tool.
-   - Dry-Run Restore comparison: displays line-by-line diffs against live configuration files without touching filesystem state.
+   - Restore snapshots with safe file-whitelist validation and diff preview.
 
 6. **Settings**:
-   - Phase 1 Safety Mode: locked active with explanation.
+   - **Safe Mode Toggle**: Clearly toggle between Safe Mode (simulated dry-run previews) and Live Mode (verified real KDE desktop modifications).
    - Snapshot storage directory path configuration.
    - UI appearance mode (Dark / System Sync) and motion animation toggles.
    - Environment and adapter readiness diagnostics.
@@ -159,10 +165,11 @@ Run the full pytest suite:
 ```
 
 The test suite validates:
-- Configuration parsing, default values, and safe mode enforcement
+- Configuration parsing, default values, and dynamic safe mode toggling
 - Safe system information detection and fallback behavior
 - Adapter boundary validation, identifier whitelisting, and dry-run execution
-- Backup snapshot creation, SHA256 integrity verification, and dry-run diffs
-- Color extraction and preset validation
-- Controller state transitions and navigation signals
-- Headless QML engine loading and view switching
+- Backup snapshot creation, SHA256 integrity verification, and safe file restoration
+- Color extraction, installed scheme discovery, and active scheme detection
+- ColorSchemeApplier validation, diff preview generation, pre-apply snapshot creation, live execution, rollback on failure, and restore
+- Controller state transitions, theme application workflow, and navigation signals
+- Headless QML engine loading and view switching (30 tests passing)

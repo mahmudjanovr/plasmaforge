@@ -12,6 +12,8 @@ from plasmaforge.core.adapter_boundary import (
     ConfigChangeSet,
 )
 
+from plasmaforge.core.color_scheme_applier import KdeColorSchemeApplier, ApplyResult
+
 __all__ = [
     "AppConfig",
     "get_config",
@@ -26,4 +28,6 @@ __all__ = [
     "SafetyViolationError",
     "ConfigChange",
     "ConfigChangeSet",
+    "KdeColorSchemeApplier",
+    "ApplyResult",
 ]

@@ -252,3 +252,45 @@ class BackupManager:
                 }
 
         return diff_summary
+
+    def restore_snapshot(
+        self, snap_id: str, file_whitelist: Optional[List[str]] = None
+    ) -> tuple[bool, str]:
+        """Safely restore KDE configuration files from a verified snapshot."""
+        snap_dir = self.backup_root / snap_id
+        if not snap_dir.is_dir():
+            return False, f"Snapshot '{snap_id}' does not exist."
+
+        # Verify integrity before attempting restore
+        valid, errors = self.verify_snapshot_integrity(snap_id)
+        if not valid:
+            return False, f"Refusing restore: snapshot integrity failed ({'; '.join(errors)})"
+
+        manifest_path = snap_dir / "manifest.json"
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            metadata = SnapshotMetadata.from_dict(json.load(f))
+
+        files_dir = snap_dir / "files"
+        restored_count = 0
+        allowed = set(SAFE_KDE_CONFIG_FILES)
+        if file_whitelist:
+            allowed = allowed.intersection(set(file_whitelist))
+
+        for entry in metadata.files:
+            if entry.name not in allowed:
+                continue
+
+            snap_file = files_dir / entry.name
+            if not snap_file.is_file():
+                continue
+
+            dest = self.source_config_dir / entry.name
+            self.source_config_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(snap_file, dest)
+            restored_count += 1
+
+        if restored_count == 0:
+            return False, "No matching configuration files found to restore."
+
+        return True, f"Successfully restored {restored_count} configuration files from {snap_id}."
+
