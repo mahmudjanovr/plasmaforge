@@ -21,7 +21,7 @@ ScrollView {
             title: "Desktop Builder"
             subtitle: "Visual desktop workspace for planning, previewing, and managing KDE Plasma 6 panel layouts"
 
-            RowLayout {
+            Flow {
                 spacing: Theme.spaceSm
 
                 PFButton {
@@ -357,9 +357,11 @@ ScrollView {
                 color: Theme.textMuted
             }
 
-            RowLayout {
+            GridLayout {
                 Layout.fillWidth: true
-                spacing: Theme.spaceMd
+                columns: desktopBuilderRoot.width > 860 ? 3 : (desktopBuilderRoot.width > 560 ? 2 : 1)
+                columnSpacing: Theme.spaceMd
+                rowSpacing: Theme.spaceMd
 
                 Repeater {
                     model: DesktopCtrl.presets
@@ -418,9 +420,11 @@ ScrollView {
         }
 
         // Workbench Controls: 2-Column Responsive Layout
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
-            spacing: Theme.spaceLg
+            columns: desktopBuilderRoot.width > 860 ? 2 : 1
+            columnSpacing: Theme.spaceLg
+            rowSpacing: Theme.spaceLg
 
             // Column 1: Top Panel Controls
             PFCard {
@@ -783,10 +787,10 @@ ScrollView {
         Rectangle {
             id: layoutModalCard
             width: Math.min(desktopBuilderRoot.width - 48, 580)
-            height: 480
+            height: Math.min(desktopBuilderRoot.height - 48, 520)
             anchors.centerIn: parent
             radius: Theme.radiusLg
-            color: Theme.cardBg
+            color: Theme.card
             border.color: AppCtrl.safeMode ? Theme.accent : Theme.warning
             border.width: 1
 
@@ -795,10 +799,14 @@ ScrollView {
                 // absorb clicks inside modal card
             }
 
-            ColumnLayout {
+            ScrollView {
                 anchors.fill: parent
                 anchors.margins: Theme.spaceXl
-                spacing: Theme.spaceMd
+                clip: true
+
+                ColumnLayout {
+                    width: layoutModalCard.width - (Theme.spaceXl * 2) - 16
+                    spacing: Theme.spaceMd
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -964,12 +972,13 @@ ScrollView {
                         onClicked: DesktopCtrl.cancelApply()
                     }
 
-                    PFButton {
-                        text: AppCtrl.safeMode ? "Confirm Simulation" : "Apply Layout to KDE"
-                        iconText: AppCtrl.safeMode ? "🛡" : "✓"
-                        variant: "primary"
-                        size: "md"
-                        onClicked: DesktopCtrl.confirmApplyDraft()
+                        PFButton {
+                            text: AppCtrl.safeMode ? "Confirm Simulation" : "Apply Layout to KDE"
+                            iconText: AppCtrl.safeMode ? "🛡" : "✓"
+                            variant: "primary"
+                            size: "md"
+                            onClicked: DesktopCtrl.confirmApplyDraft()
+                        }
                     }
                 }
             }

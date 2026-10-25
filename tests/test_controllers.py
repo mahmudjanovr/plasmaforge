@@ -1,8 +1,10 @@
 """Tests for application controllers."""
 
+from pathlib import Path
 from PySide6.QtGui import QGuiApplication
 import pytest
 
+from plasmaforge.core.backup_manager import BackupManager
 from plasmaforge.controllers import (
     AppController,
     BackupController,
@@ -159,4 +161,95 @@ def test_desktop_controller_workflow(qapp: QGuiApplication) -> None:
     assert ok is True
     assert dry is True
     assert "Safe Mode active" in msg
+
+
+def test_backup_controller_deletion_and_search(tmp_path: Path, qapp: QGuiApplication) -> None:
+    source_dir = tmp_path / "mock_config"
+    source_dir.mkdir()
+    (source_dir / "kdeglobals").write_text("[General]\nfont=Inter\n")
+
+    backup_dir = tmp_path / "snapshots"
+    bm = BackupManager(backup_root=backup_dir, source_config_dir=source_dir)
+    ctrl = BackupController(backup_manager=bm)
+
+    assert ctrl.totalSnapshotCount == 0
+    assert ctrl.snapshotCount == 0
+    assert ctrl.searchQuery == ""
+
+    # Create 3 snapshots
+    assert ctrl.createSnapshot("Alpha Snapshot") is True
+    assert ctrl.createSnapshot("Beta Snapshot") is True
+    assert ctrl.createSnapshot("Gamma Snapshot") is True
+    assert ctrl.totalSnapshotCount == 3
+    assert ctrl.snapshotCount == 3
+    assert len(ctrl.snapshots) == 3
+
+    # Test search query filtering
+    ctrl.setSearchQuery("Alpha")
+    assert ctrl.snapshotCount == 1
+    assert ctrl.totalSnapshotCount == 3
+    assert ctrl.snapshots[0]["description"] == "Alpha Snapshot"
+
+    ctrl.setSearchQuery("NonExistent")
+    assert ctrl.snapshotCount == 0
+    assert ctrl.totalSnapshotCount == 3
+
+    ctrl.setSearchQuery("")
+    assert ctrl.snapshotCount == 3
+    assert ctrl.totalSnapshotCount == 3
+
+    # Selection and adjacent selection behavior
+    selected_target = ctrl.snapshots[1]["id"]
+    ctrl.selectSnapshot(selected_target)
+    assert ctrl.selectedSnapshotId == selected_target
+    assert ctrl.selectedSnapshot["id"] == selected_target
+
+    # Test delete request workflow
+    delete_dialog_events = []
+    ctrl.deleteConfirmDialogChanged.connect(lambda: delete_dialog_events.append(ctrl.showDeleteConfirmDialog))
+
+    ctrl.requestDeleteSnapshot(selected_target)
+    assert ctrl.showDeleteConfirmDialog is True
+    assert ctrl.deleteTargetSnapshotId == selected_target
+    assert ctrl.deleteTargetDescription == "Beta Snapshot"
+
+    # Test cancel delete
+    ctrl.cancelDelete()
+    assert ctrl.showDeleteConfirmDialog is False
+    assert ctrl.deleteTargetSnapshotId == ""
+
+    # Test confirm delete
+    ctrl.requestDeleteSnapshot(selected_target)
+    completed_events = []
+    ctrl.snapshotOperationCompleted.connect(lambda msg, ok: completed_events.append((msg, ok)))
+
+    ctrl.confirmDelete()
+    assert ctrl.showDeleteConfirmDialog is False
+    assert len(completed_events) == 1
+    assert completed_events[0][1] is True
+    assert "deleted" in completed_events[0][0].lower()
+    assert ctrl.totalSnapshotCount == 2
+    remaining_ids = [s["id"] for s in ctrl.snapshots]
+    assert selected_target not in remaining_ids
+    # Adjacent selection: should point to a valid remaining snapshot
+    assert ctrl.selectedSnapshotId in remaining_ids
+
+    # Test protection against deletion during active transaction/restore
+    last_snap_id = ctrl.snapshots[0]["id"]
+    ctrl.addProtectedSnapshotId(last_snap_id)
+    assert ctrl.deleteSnapshot(last_snap_id) is False
+    assert ctrl.totalSnapshotCount == 2
+
+    ctrl.removeProtectedSnapshotId(last_snap_id)
+    assert ctrl.deleteSnapshot(last_snap_id) is True
+    assert ctrl.totalSnapshotCount == 1
+
+    # Delete the final remaining snapshot
+    final_id = ctrl.snapshots[0]["id"]
+    assert ctrl.deleteSnapshot(final_id) is True
+    assert ctrl.totalSnapshotCount == 0
+    assert ctrl.snapshotCount == 0
+    assert ctrl.selectedSnapshotId == ""
+    assert ctrl.selectedSnapshot == {}
+
 

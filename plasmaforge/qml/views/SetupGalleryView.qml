@@ -95,12 +95,15 @@ ScrollView {
                 anchors.margins: Theme.spaceMd
                 spacing: Theme.spaceMd
 
-                RowLayout {
+                GridLayout {
                     Layout.fillWidth: true
-                    spacing: Theme.spaceLg
+                    columns: galleryRoot.width > 760 ? 2 : 1
+                    columnSpacing: Theme.spaceLg
+                    rowSpacing: Theme.spaceMd
 
                     // Category Filter Pills
-                    RowLayout {
+                    Flow {
+                        Layout.fillWidth: true
                         spacing: Theme.spaceSm
 
                         Repeater {
@@ -141,11 +144,11 @@ ScrollView {
                         }
                     }
 
-                    Item { Layout.fillWidth: true }
-
                     // Search input field
                     Rectangle {
-                        implicitWidth: 260
+                        Layout.fillWidth: galleryRoot.width <= 760
+                        Layout.alignment: galleryRoot.width > 760 ? Qt.AlignRight : Qt.AlignLeft
+                        implicitWidth: galleryRoot.width > 760 ? 260 : -1
                         implicitHeight: 32
                         radius: Theme.radiusMd
                         color: Theme.inputBg
@@ -230,15 +233,18 @@ ScrollView {
         }
 
         // Split Layout: Cards Grid / List (Left) and Blueprint Detail (Right)
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
-            spacing: Theme.spaceLg
+            columns: galleryRoot.width > 900 ? 2 : 1
+            columnSpacing: Theme.spaceLg
+            rowSpacing: Theme.spaceLg
             visible: PresetCtrl.profiles.length > 0
             Layout.alignment: Qt.AlignTop
 
             // Left Column: Profile Cards List
             ColumnLayout {
-                Layout.preferredWidth: 420
+                Layout.preferredWidth: galleryRoot.width > 900 ? 400 : -1
+                Layout.fillWidth: true
                 Layout.alignment: Qt.AlignTop
                 spacing: Theme.spaceMd
 
@@ -888,13 +894,22 @@ ScrollView {
             id: importDialogCard
             anchors.centerIn: parent
             width: Math.min(galleryRoot.width - 48, 580)
-            implicitHeight: importContentCol.implicitHeight + (Theme.spaceXl * 2)
+            height: Math.min(importContentCol.implicitHeight + (Theme.spaceXl * 2), galleryRoot.height - 48)
 
-            ColumnLayout {
-                id: importContentCol
+            MouseArea {
+                anchors.fill: parent
+                // absorb clicks inside modal card
+            }
+
+            ScrollView {
                 anchors.fill: parent
                 anchors.margins: Theme.spaceXl
-                spacing: Theme.spaceMd
+                clip: true
+
+                ColumnLayout {
+                    id: importContentCol
+                    width: importDialogCard.width - (Theme.spaceXl * 2) - 16
+                    spacing: Theme.spaceMd
 
                 // Modal Header
                 RowLayout {
@@ -1131,4 +1146,5 @@ ScrollView {
             }
         }
     }
+}
 }

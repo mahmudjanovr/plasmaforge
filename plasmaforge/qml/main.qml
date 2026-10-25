@@ -11,7 +11,7 @@ ApplicationWindow {
     visible: true
     width: 1100
     height: 720
-    minimumWidth: 880
+    minimumWidth: 800
     minimumHeight: 560
     title: "PlasmaForge - KDE Plasma 6 Customization Studio"
     color: Theme.bg
@@ -42,7 +42,7 @@ ApplicationWindow {
         // ==========================================
         Rectangle {
             id: sidebar
-            Layout.preferredWidth: 236
+            Layout.preferredWidth: appWindow.width < 960 ? 200 : 236
             Layout.fillHeight: true
             color: Theme.surface
             border.color: Theme.borderSubtle
@@ -292,6 +292,7 @@ ApplicationWindow {
                         text: SystemCtrl.distribution
                         variant: "neutral"
                         size: "sm"
+                        visible: appWindow.width > 900
                     }
                 }
             }

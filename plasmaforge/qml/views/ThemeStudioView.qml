@@ -55,16 +55,18 @@ Item {
                 }
             }
 
-            // Two-column layout: Schemes list on left, Palette detail on right
-            RowLayout {
+            // Responsive Two-column layout: Schemes list on left, Palette detail on right
+            GridLayout {
                 Layout.fillWidth: true
-                spacing: Theme.spaceLg
+                columns: themeStudioRoot.width > 900 ? 2 : 1
+                columnSpacing: Theme.spaceLg
+                rowSpacing: Theme.spaceLg
 
                 // Left: Color Schemes list
                 PFCard {
-                    Layout.preferredWidth: 350
-                    Layout.fillHeight: true
-                    implicitHeight: 480
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: themeStudioRoot.width > 900 ? 360 : 1
+                    implicitHeight: themeStudioRoot.width > 900 ? 520 : 380
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -95,6 +97,11 @@ Item {
                             clip: true
                             spacing: Theme.spaceSm
                             model: ThemeCtrl.colorSchemes
+
+                            ScrollBar.vertical: ScrollBar {
+                                active: true
+                                policy: ScrollBar.AsNeeded
+                            }
 
                             delegate: Rectangle {
                                 width: schemesList.width
@@ -171,7 +178,7 @@ Item {
                 // Right: Selected Scheme Palette Inspector & Action Center
                 PFCard {
                     Layout.fillWidth: true
-                    implicitHeight: 480
+                    implicitHeight: themeStudioRoot.width > 900 ? 520 : -1
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -223,7 +230,7 @@ Item {
                         }
 
                         // Action Buttons Bar
-                        RowLayout {
+                        Flow {
                             Layout.fillWidth: true
                             spacing: Theme.spaceSm
 
@@ -255,8 +262,6 @@ Item {
                                 size: "md"
                                 onClicked: ThemeCtrl.restorePreviousScheme()
                             }
-
-                            Item { Layout.fillWidth: true }
                         }
 
                         Rectangle {
@@ -367,7 +372,7 @@ Item {
                         }
 
                         // Color Hex Tokens Row
-                        RowLayout {
+                        Flow {
                             Layout.fillWidth: true
                             spacing: Theme.spaceMd
 
@@ -389,8 +394,6 @@ Item {
                                     }
                                 }
                             }
-
-                            Item { Layout.fillWidth: true }
                         }
                     }
                 }
@@ -457,9 +460,11 @@ Item {
                 subtitle: "Detected desktop themes governing panels, widgets, and Plasma overlays"
             }
 
-            RowLayout {
+            GridLayout {
                 Layout.fillWidth: true
-                spacing: Theme.spaceLg
+                columns: themeStudioRoot.width > 800 ? Math.min(Math.max(ThemeCtrl.plasmaStyles.length, 1), 3) : 1
+                columnSpacing: Theme.spaceLg
+                rowSpacing: Theme.spaceLg
 
                 Repeater {
                     model: ThemeCtrl.plasmaStyles
@@ -533,227 +538,237 @@ Item {
         PFCard {
             id: confirmCard
             anchors.centerIn: parent
-            width: Math.min(parent.width - 48, 560)
-            implicitHeight: modalContentCol.implicitHeight + (Theme.spaceXl * 2)
+            width: Math.min(confirmModalOverlay.width - 48, 560)
+            height: Math.min(modalContentCol.implicitHeight + (Theme.spaceXl * 2), confirmModalOverlay.height - 48)
 
-            ColumnLayout {
-                id: modalContentCol
+            MouseArea {
+                anchors.fill: parent
+                // absorb clicks inside card
+            }
+
+            ScrollView {
                 anchors.fill: parent
                 anchors.margins: Theme.spaceXl
-                spacing: Theme.spaceMd
+                clip: true
 
-                RowLayout {
-                    Layout.fillWidth: true
+                ColumnLayout {
+                    id: modalContentCol
+                    width: confirmCard.width - (Theme.spaceXl * 2) - 16
                     spacing: Theme.spaceMd
 
-                    Rectangle {
-                        width: 36
-                        height: 36
-                        radius: Theme.radiusMd
-                        color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.15) : Qt.rgba(0.96, 0.62, 0.04, 0.15)
-                        border.color: AppCtrl.safeMode ? Theme.accent : Theme.warning
-                        border.width: 1
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: AppCtrl.safeMode ? "🛡" : "⚡"
-                            font.pixelSize: 18
-                        }
-                    }
-
-                    ColumnLayout {
+                    RowLayout {
                         Layout.fillWidth: true
-                        spacing: 2
+                        spacing: Theme.spaceMd
 
-                        Text {
-                            text: "Confirm Color Scheme Application"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeLg
-                            font.weight: Font.DemiBold
-                            color: Theme.textPrimary
+                        Rectangle {
+                            width: 36
+                            height: 36
+                            radius: Theme.radiusMd
+                            color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.15) : Qt.rgba(0.96, 0.62, 0.04, 0.15)
+                            border.color: AppCtrl.safeMode ? Theme.accent : Theme.warning
+                            border.width: 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: AppCtrl.safeMode ? "🛡" : "⚡"
+                                font.pixelSize: 18
+                            }
                         }
 
-                        Text {
-                            text: "Selected: " + ThemeCtrl.confirmSchemeName + " (Active: " + ThemeCtrl.activeSchemeId + ")"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeSm
-                            color: Theme.accentLight
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.borderSubtle
-                }
-
-                // Safety Note
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: safetyNoteCol.implicitHeight + 16
-                    radius: Theme.radiusMd
-                    color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.1) : Qt.rgba(0.96, 0.62, 0.04, 0.1)
-                    border.color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.25) : Qt.rgba(0.96, 0.62, 0.04, 0.25)
-                    border.width: 1
-
-                    ColumnLayout {
-                        id: safetyNoteCol
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 4
-
-                        Text {
-                            text: AppCtrl.safeMode ? "Safe Mode Simulation:" : "Live Session Update:"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeSm
-                            font.weight: Font.DemiBold
-                            color: AppCtrl.safeMode ? Theme.accentLight : Theme.warning
-                        }
-                        Text {
-                            text: AppCtrl.safeMode
-                                ? "Safe Mode is currently ON. A simulated dry-run will verify the backup engine and generate diffs without modifying your active desktop session."
-                                : "A verified cryptographic snapshot of ~/.config/kdeglobals will be created automatically before applying. Running KDE apps will re-theme immediately."
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeXs
-                            color: Theme.textSecondary
-                            wrapMode: Text.WordWrap
+                        ColumnLayout {
                             Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                text: "Confirm Color Scheme Application"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeLg
+                                font.weight: Font.DemiBold
+                                color: Theme.textPrimary
+                            }
+
+                            Text {
+                                text: "Selected: " + ThemeCtrl.confirmSchemeName + " (Active: " + ThemeCtrl.activeSchemeId + ")"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSm
+                                color: Theme.accentLight
+                            }
                         }
                     }
-                }
-
-                // Transactional Pipeline Steps
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 6
 
                     Rectangle {
-                        height: 22
-                        radius: Theme.radiusSm
-                        color: Qt.rgba(1, 1, 1, 0.04)
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Theme.borderSubtle
+                    }
+
+                    // Safety Note
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: safetyNoteCol.implicitHeight + 16
+                        radius: Theme.radiusMd
+                        color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.1) : Qt.rgba(0.96, 0.62, 0.04, 0.1)
+                        border.color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.25) : Qt.rgba(0.96, 0.62, 0.04, 0.25)
+                        border.width: 1
+
+                        ColumnLayout {
+                            id: safetyNoteCol
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 4
+
+                            Text {
+                                text: AppCtrl.safeMode ? "Safe Mode Simulation:" : "Live Session Update:"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSm
+                                font.weight: Font.DemiBold
+                                color: AppCtrl.safeMode ? Theme.accentLight : Theme.warning
+                            }
+                            Text {
+                                text: AppCtrl.safeMode
+                                    ? "Safe Mode is currently ON. A simulated dry-run will verify the backup engine and generate diffs without modifying your active desktop session."
+                                    : "A verified cryptographic snapshot of ~/.config/kdeglobals will be created automatically before applying. Running KDE apps will re-theme immediately."
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeXs
+                                color: Theme.textSecondary
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+
+                    // Transactional Pipeline Steps
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        Rectangle {
+                            height: 22
+                            radius: Theme.radiusSm
+                            color: Qt.rgba(1, 1, 1, 0.04)
+                            border.color: Theme.borderSubtle
+                            border.width: 1
+                            Layout.fillWidth: true
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "1. Preview Diff"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 10
+                                font.weight: Font.DemiBold
+                                color: Theme.textMuted
+                            }
+                        }
+
+                        Rectangle {
+                            height: 22
+                            radius: Theme.radiusSm
+                            color: Qt.rgba(0.08, 0.72, 0.65, 0.1)
+                            border.color: Qt.rgba(0.08, 0.72, 0.65, 0.25)
+                            border.width: 1
+                            Layout.fillWidth: true
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "2. SHA256 Backup"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 10
+                                font.weight: Font.DemiBold
+                                color: Theme.accentLight
+                            }
+                        }
+
+                        Rectangle {
+                            height: 22
+                            radius: Theme.radiusSm
+                            color: Qt.rgba(1, 1, 1, 0.04)
+                            border.color: Theme.borderSubtle
+                            border.width: 1
+                            Layout.fillWidth: true
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "3. Apply (shell=False)"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 10
+                                font.weight: Font.DemiBold
+                                color: Theme.textMuted
+                            }
+                        }
+
+                        Rectangle {
+                            height: 22
+                            radius: Theme.radiusSm
+                            color: Qt.rgba(0.08, 0.72, 0.65, 0.1)
+                            border.color: Qt.rgba(0.08, 0.72, 0.65, 0.25)
+                            border.width: 1
+                            Layout.fillWidth: true
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "4. Verify & Rollback"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 10
+                                font.weight: Font.DemiBold
+                                color: Theme.accentLight
+                            }
+                        }
+                    }
+
+                    // Diff preview block
+                    Text {
+                        text: "INTENDED CONFIGURATION CHANGES (TARGET: ~/.config/kdeglobals)"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeXs
+                        font.weight: Font.DemiBold
+                        color: Theme.textMuted
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 130
+                        radius: Theme.radiusMd
+                        color: "#0f1115"
                         border.color: Theme.borderSubtle
                         border.width: 1
+
+                        ScrollView {
+                            anchors.fill: parent
+                            anchors.margins: Theme.spaceMd
+                            clip: true
+
+                            Text {
+                                text: ThemeCtrl.currentDiffPreview
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.fontSizeXs
+                                color: Theme.textSecondary
+                                wrapMode: Text.NoWrap
+                            }
+                        }
+                    }
+
+                    // Modal Actions
+                    RowLayout {
                         Layout.fillWidth: true
+                        Layout.topMargin: Theme.spaceSm
+                        spacing: Theme.spaceMd
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: "1. Preview Diff"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 10
-                            font.weight: Font.DemiBold
-                            color: Theme.textMuted
+                        Item { Layout.fillWidth: true }
+
+                        PFButton {
+                            text: "Cancel"
+                            variant: "secondary"
+                            size: "md"
+                            onClicked: ThemeCtrl.cancelApply()
                         }
-                    }
 
-                    Rectangle {
-                        height: 22
-                        radius: Theme.radiusSm
-                        color: Qt.rgba(0.08, 0.72, 0.65, 0.1)
-                        border.color: Qt.rgba(0.08, 0.72, 0.65, 0.25)
-                        border.width: 1
-                        Layout.fillWidth: true
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "2. SHA256 Backup"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 10
-                            font.weight: Font.DemiBold
-                            color: Theme.accentLight
+                        PFButton {
+                            text: AppCtrl.safeMode ? "Confirm Simulation" : "Apply to KDE Session"
+                            iconText: AppCtrl.safeMode ? "🛡" : "⚡"
+                            variant: "primary"
+                            size: "md"
+                            onClicked: ThemeCtrl.confirmApplySelected()
                         }
-                    }
-
-                    Rectangle {
-                        height: 22
-                        radius: Theme.radiusSm
-                        color: Qt.rgba(1, 1, 1, 0.04)
-                        border.color: Theme.borderSubtle
-                        border.width: 1
-                        Layout.fillWidth: true
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "3. Apply (shell=False)"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 10
-                            font.weight: Font.DemiBold
-                            color: Theme.textMuted
-                        }
-                    }
-
-                    Rectangle {
-                        height: 22
-                        radius: Theme.radiusSm
-                        color: Qt.rgba(0.08, 0.72, 0.65, 0.1)
-                        border.color: Qt.rgba(0.08, 0.72, 0.65, 0.25)
-                        border.width: 1
-                        Layout.fillWidth: true
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "4. Verify & Rollback"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 10
-                            font.weight: Font.DemiBold
-                            color: Theme.accentLight
-                        }
-                    }
-                }
-
-                // Diff preview block
-                Text {
-                    text: "INTENDED CONFIGURATION CHANGES (TARGET: ~/.config/kdeglobals)"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeXs
-                    font.weight: Font.DemiBold
-                    color: Theme.textMuted
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 130
-                    radius: Theme.radiusMd
-                    color: "#0f1115"
-                    border.color: Theme.borderSubtle
-                    border.width: 1
-
-                    ScrollView {
-                        anchors.fill: parent
-                        anchors.margins: Theme.spaceMd
-                        clip: true
-
-                        Text {
-                            text: ThemeCtrl.currentDiffPreview
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontSizeXs
-                            color: Theme.textSecondary
-                            wrapMode: Text.NoWrap
-                        }
-                    }
-                }
-
-                // Modal Actions
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Theme.spaceSm
-                    spacing: Theme.spaceMd
-
-                    Item { Layout.fillWidth: true }
-
-                    PFButton {
-                        text: "Cancel"
-                        variant: "secondary"
-                        size: "md"
-                        onClicked: ThemeCtrl.cancelApply()
-                    }
-
-                    PFButton {
-                        text: AppCtrl.safeMode ? "Confirm Simulation" : "Apply to KDE Session"
-                        iconText: AppCtrl.safeMode ? "🛡" : "⚡"
-                        variant: "primary"
-                        size: "md"
-                        onClicked: ThemeCtrl.confirmApplySelected()
                     }
                 }
             }

@@ -33,9 +33,11 @@ ScrollView {
                 anchors.margins: Theme.spaceXl
                 spacing: Theme.spaceMd
 
-                RowLayout {
+                GridLayout {
                     Layout.fillWidth: true
-                    spacing: Theme.spaceMd
+                    columns: settingsRoot.width > 740 ? 3 : 1
+                    columnSpacing: Theme.spaceMd
+                    rowSpacing: Theme.spaceMd
 
                     Rectangle {
                         width: 36
@@ -88,6 +90,7 @@ ScrollView {
                         text: SettingsCtrl.safeMode ? "Switch to Live Mode" : "Switch to Safe Mode"
                         variant: SettingsCtrl.safeMode ? "warning" : "primary"
                         size: "md"
+                        Layout.alignment: settingsRoot.width > 740 ? Qt.AlignRight : Qt.AlignLeft
                         onClicked: {
                             SettingsCtrl.setSafeMode(!SettingsCtrl.safeMode)
                         }
@@ -262,7 +265,7 @@ ScrollView {
 
                 GridLayout {
                     Layout.fillWidth: true
-                    columns: 2
+                    columns: settingsRoot.width > 680 ? 2 : 1
                     columnSpacing: Theme.spaceXl
                     rowSpacing: Theme.spaceSm
 
@@ -282,7 +285,7 @@ ScrollView {
                     Text { text: SystemCtrl.activeLookAndFeel; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSizeSm; color: Theme.textPrimary }
 
                     Text { text: "Hardware Graphics Target:"; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSizeSm; color: Theme.textMuted }
-                    Text { text: "Intel Integrated Graphics / 8 GB RAM (Optimized SceneGraph)"; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSizeSm; color: Theme.textSecondary }
+                    Text { text: "Intel Integrated Graphics / 8 GB RAM (Optimized SceneGraph)"; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSizeSm; color: Theme.textSecondary; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                 }
             }
         }

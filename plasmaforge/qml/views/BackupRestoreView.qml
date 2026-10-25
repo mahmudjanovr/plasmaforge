@@ -11,7 +11,7 @@ ScrollView {
     clip: true
 
     ColumnLayout {
-        width: Math.min(backupRoot.width - (Theme.spaceXxl * 2), 1100)
+        width: Math.min(backupRoot.width - (Theme.spaceXxl * 2), 1140)
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: Theme.spaceXl
 
@@ -19,15 +19,20 @@ ScrollView {
 
         PFSectionHeader {
             title: "Backups & Restore"
-            subtitle: "Create cryptographic snapshots of KDE 6 configurations and perform dry-run audits"
+            subtitle: "Create cryptographic snapshots of KDE 6 configurations, audit diffs, and safely restore or purge backups"
 
-            PFButton {
-                text: "Refresh Snapshots"
-                iconText: "↻"
-                size: "sm"
-                onClicked: {
-                    BackupCtrl.refreshSnapshots()
-                    AppCtrl.showToast("Snapshot registry refreshed.", "info")
+            RowLayout {
+                spacing: Theme.spaceSm
+
+                PFButton {
+                    text: "Refresh Snapshots"
+                    iconText: "↻"
+                    variant: "secondary"
+                    size: "sm"
+                    onClicked: {
+                        BackupCtrl.refreshSnapshots()
+                        AppCtrl.showToast("Snapshot registry refreshed.", "info")
+                    }
                 }
             }
         }
@@ -37,14 +42,19 @@ ScrollView {
             Layout.fillWidth: true
             implicitHeight: createLayout.implicitHeight + (Theme.spaceLg * 2)
 
-            RowLayout {
+            GridLayout {
                 id: createLayout
                 anchors.fill: parent
                 anchors.margins: Theme.spaceLg
-                spacing: Theme.spaceMd
+                columns: backupRoot.width > 760 ? 3 : 1
+                columnSpacing: Theme.spaceMd
+                rowSpacing: Theme.spaceSm
 
                 ColumnLayout {
                     spacing: 2
+                    Layout.preferredWidth: backupRoot.width > 760 ? 240 : -1
+                    Layout.fillWidth: backupRoot.width <= 760
+
                     Text {
                         text: "Create Safe Snapshot"
                         font.family: Theme.fontFamily
@@ -57,6 +67,7 @@ ScrollView {
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeXs
                         color: Theme.textMuted
+                        elide: Text.ElideRight
                     }
                 }
 
@@ -87,6 +98,7 @@ ScrollView {
                     iconText: "🛡"
                     variant: "primary"
                     size: "md"
+                    Layout.alignment: backupRoot.width > 760 ? Qt.AlignRight : Qt.AlignLeft
                     onClicked: {
                         var ok = BackupCtrl.createSnapshot(descInput.text)
                         if (ok) {
@@ -99,24 +111,29 @@ ScrollView {
             }
         }
 
-        // Two-column layout: Snapshots on left, Detail/Diff on right
-        RowLayout {
+        // Responsive Two-column Layout: Snapshots on left, Detail/Diff on right
+        GridLayout {
             Layout.fillWidth: true
-            spacing: Theme.spaceLg
+            columns: backupRoot.width > 900 ? 2 : 1
+            columnSpacing: Theme.spaceLg
+            rowSpacing: Theme.spaceLg
 
-            // Left: Snapshots List
+            // Left: Snapshots List Card
             PFCard {
-                Layout.preferredWidth: 380
-                Layout.fillHeight: true
-                implicitHeight: 460
+                Layout.fillWidth: true
+                Layout.preferredWidth: backupRoot.width > 900 ? 420 : 1
+                implicitHeight: 520
 
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: Theme.spaceLg
                     spacing: Theme.spaceMd
 
+                    // Header row with count badges
                     RowLayout {
                         Layout.fillWidth: true
+                        spacing: Theme.spaceSm
+
                         Text {
                             text: "STORED SNAPSHOTS"
                             font.family: Theme.fontFamily
@@ -125,118 +142,212 @@ ScrollView {
                             color: Theme.textMuted
                             Layout.fillWidth: true
                         }
+
                         PFBadge {
-                            text: BackupCtrl.snapshotCount + " Total"
+                            text: BackupCtrl.totalSnapshotCount + " Total"
                             variant: "neutral"
+                            size: "xs"
+                        }
+
+                        PFBadge {
+                            visible: BackupCtrl.searchQuery.length > 0
+                            text: BackupCtrl.snapshotCount + " Found"
+                            variant: "accent"
                             size: "xs"
                         }
                     }
 
-                    ListView {
-                        id: snapsList
+                    // Search filter bar
+                    Rectangle {
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        clip: true
-                        spacing: Theme.spaceSm
-                        model: BackupCtrl.snapshots
+                        implicitHeight: 32
+                        radius: Theme.radiusMd
+                        color: Theme.inputBg
+                        border.color: snapSearchInput.activeFocus ? Theme.borderActive : Theme.borderSubtle
+                        border.width: 1
 
-                        delegate: Rectangle {
-                            width: snapsList.width
-                            height: 64
-                            radius: Theme.radiusMd
-                            color: BackupCtrl.selectedSnapshotId === modelData.id ? Qt.rgba(0.08, 0.72, 0.65, 0.12) : (snapMouse.containsMouse ? Theme.cardHover : Theme.surface)
-                            border.color: BackupCtrl.selectedSnapshotId === modelData.id ? Theme.accent : Theme.borderSubtle
-                            border.width: 1
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 6
 
-                            Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
-
-                            MouseArea {
-                                id: snapMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: BackupCtrl.selectSnapshot(modelData.id)
+                            Text {
+                                text: "🔍"
+                                font.pixelSize: 11
+                                color: Theme.textMuted
                             }
 
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.margins: Theme.spaceMd
-                                spacing: Theme.spaceSm
+                            TextInput {
+                                id: snapSearchInput
+                                Layout.fillWidth: true
+                                text: BackupCtrl.searchQuery
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSm
+                                color: Theme.textPrimary
+                                selectByMouse: true
+                                verticalAlignment: TextInput.AlignVCenter
+                                onTextChanged: BackupCtrl.setSearchQuery(text)
 
-                                Rectangle {
-                                    width: 32
-                                    height: 32
-                                    radius: Theme.radiusSm
-                                    color: Qt.rgba(1, 1, 1, 0.05)
-                                    border.color: Theme.borderSubtle
-                                    border.width: 1
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "🛡"
-                                        font.pixelSize: 14
-                                    }
+                                Text {
+                                    text: "Filter snapshots by ID or note..."
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSm
+                                    color: Theme.textMuted
+                                    visible: !snapSearchInput.text && !snapSearchInput.activeFocus
+                                    anchors.verticalCenter: parent.verticalCenter
                                 }
+                            }
 
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 1
+                            Text {
+                                text: "✕"
+                                font.pixelSize: 11
+                                color: clearSnapSearch.containsMouse ? Theme.textPrimary : Theme.textMuted
+                                visible: snapSearchInput.text.length > 0
 
-                                    Text {
-                                        text: modelData.id
-                                        font.family: Theme.fontMono
-                                        font.pixelSize: Theme.fontSizeSm
-                                        font.weight: BackupCtrl.selectedSnapshotId === modelData.id ? Font.DemiBold : Font.Normal
-                                        color: BackupCtrl.selectedSnapshotId === modelData.id ? Theme.accentLight : Theme.textPrimary
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                    }
-
-                                    Text {
-                                        text: modelData.description || "Safe Snapshot"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSizeXs
-                                        color: Theme.textSecondary
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                    }
-
-                                    Text {
-                                        text: modelData.file_count + " files • " + Math.round(modelData.total_size_bytes / 1024) + " KB"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSizeXs
-                                        color: Theme.textMuted
+                                MouseArea {
+                                    id: clearSnapSearch
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        snapSearchInput.text = ""
+                                        BackupCtrl.setSearchQuery("")
                                     }
                                 }
                             }
                         }
+                    }
 
-                        // Empty notice when no snapshots exist
-                        Item {
-                            visible: BackupCtrl.snapshotCount === 0
+                    // Snapshots Scrollable ListView
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        ListView {
+                            id: snapsList
                             anchors.fill: parent
+                            clip: true
+                            spacing: Theme.spaceSm
+                            model: BackupCtrl.snapshots
 
-                            ColumnLayout {
-                                anchors.centerIn: parent
-                                spacing: Theme.spaceSm
+                            ScrollBar.vertical: ScrollBar {
+                                active: true
+                                policy: ScrollBar.AsNeeded
+                            }
 
-                                Text {
-                                    text: "No Snapshots Yet"
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.fontSizeBase
-                                    font.weight: Font.DemiBold
-                                    color: Theme.textMuted
-                                    Layout.alignment: Qt.AlignHCenter
+                            delegate: Rectangle {
+                                width: snapsList.width - (snapsList.contentHeight > snapsList.height ? 12 : 0)
+                                height: 68
+                                radius: Theme.radiusMd
+                                color: BackupCtrl.selectedSnapshotId === modelData.id
+                                    ? Qt.rgba(0.08, 0.72, 0.65, 0.12)
+                                    : (snapMouse.containsMouse ? Theme.cardHover : Theme.surface)
+                                border.color: BackupCtrl.selectedSnapshotId === modelData.id
+                                    ? Theme.accent
+                                    : Theme.borderSubtle
+                                border.width: 1
+
+                                Behavior on color { ColorAnimation { duration: Theme.animDurationFast } }
+
+                                MouseArea {
+                                    id: snapMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: BackupCtrl.selectSnapshot(modelData.id)
                                 }
-                                Text {
-                                    text: "Click 'Create Snapshot' above to safely back up your KDE configuration."
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.fontSizeXs
-                                    color: Theme.textMuted
-                                    horizontalAlignment: Text.AlignHCenter
-                                    wrapMode: Text.WordWrap
-                                    Layout.maximumWidth: 260
-                                    Layout.alignment: Qt.AlignHCenter
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: Theme.spaceMd
+                                    spacing: Theme.spaceSm
+
+                                    Rectangle {
+                                        width: 32
+                                        height: 32
+                                        radius: Theme.radiusSm
+                                        color: Qt.rgba(1, 1, 1, 0.05)
+                                        border.color: Theme.borderSubtle
+                                        border.width: 1
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "🛡"
+                                            font.pixelSize: 14
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+
+                                        Text {
+                                            text: modelData.id
+                                            font.family: Theme.fontMono
+                                            font.pixelSize: Theme.fontSizeSm
+                                            font.weight: BackupCtrl.selectedSnapshotId === modelData.id ? Font.DemiBold : Font.Normal
+                                            color: BackupCtrl.selectedSnapshotId === modelData.id ? Theme.accentLight : Theme.textPrimary
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Text {
+                                            text: modelData.description || "Safe Snapshot"
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: Theme.fontSizeXs
+                                            color: Theme.textSecondary
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Text {
+                                            text: (modelData.file_count || 0) + " files • " + Math.round((modelData.total_size_bytes || 0) / 1024) + " KB"
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: Theme.fontSizeXs
+                                            color: Theme.textMuted
+                                        }
+                                    }
+
+                                    // Quick Delete Icon Button on Item
+                                    PFButton {
+                                        iconText: "🗑"
+                                        variant: "subtle"
+                                        size: "sm"
+                                        onClicked: BackupCtrl.requestDeleteSnapshot(modelData.id)
+                                    }
+                                }
+                            }
+
+                            // Empty state when no snapshots exist or match filter
+                            Item {
+                                visible: BackupCtrl.snapshotCount === 0
+                                anchors.fill: parent
+
+                                ColumnLayout {
+                                    anchors.centerIn: parent
+                                    spacing: Theme.spaceSm
+
+                                    Text {
+                                        text: BackupCtrl.totalSnapshotCount === 0 ? "No Snapshots Stored" : "No Matching Snapshots"
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeBase
+                                        font.weight: Font.DemiBold
+                                        color: Theme.textMuted
+                                        Layout.alignment: Qt.AlignHCenter
+                                    }
+                                    Text {
+                                        text: BackupCtrl.totalSnapshotCount === 0
+                                            ? "Click 'Create Snapshot' above to safely back up your KDE Plasma configuration."
+                                            : "Try adjusting your search filter."
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeXs
+                                        color: Theme.textMuted
+                                        horizontalAlignment: Text.AlignHCenter
+                                        wrapMode: Text.WordWrap
+                                        Layout.maximumWidth: 260
+                                        Layout.alignment: Qt.AlignHCenter
+                                    }
                                 }
                             }
                         }
@@ -244,16 +355,17 @@ ScrollView {
                 }
             }
 
-            // Right: Selected Snapshot Detail & Dry-Run Diff
+            // Right: Selected Snapshot Detail & Dry-Run Diff Card
             PFCard {
                 Layout.fillWidth: true
-                implicitHeight: 460
+                implicitHeight: 520
 
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: Theme.spaceXl
                     spacing: Theme.spaceMd
 
+                    // Detail Header & Metadata
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spaceMd
@@ -271,7 +383,9 @@ ScrollView {
                             }
 
                             Text {
-                                text: BackupCtrl.selectedSnapshot.description ? (BackupCtrl.selectedSnapshot.description + " • Created " + BackupCtrl.selectedSnapshot.created_at) : "No snapshot currently active."
+                                text: BackupCtrl.selectedSnapshot.description
+                                    ? (BackupCtrl.selectedSnapshot.description + " • Created " + BackupCtrl.selectedSnapshot.created_at)
+                                    : "No snapshot currently active."
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeXs
                                 color: Theme.textSecondary
@@ -279,6 +393,12 @@ ScrollView {
                                 Layout.fillWidth: true
                             }
                         }
+                    }
+
+                    // Action Buttons Bar: Verify, Diff, Restore, and Delete
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spaceSm
 
                         PFButton {
                             text: "Verify Integrity"
@@ -303,6 +423,8 @@ ScrollView {
                             }
                         }
 
+                        Item { Layout.fillWidth: true }
+
                         PFButton {
                             text: "Restore Snapshot"
                             iconText: "↩"
@@ -310,6 +432,15 @@ ScrollView {
                             size: "sm"
                             enabled: BackupCtrl.selectedSnapshotId !== "" && !BackupCtrl.isRestoring
                             onClicked: BackupCtrl.requestRestoreSnapshot(BackupCtrl.selectedSnapshotId)
+                        }
+
+                        PFButton {
+                            text: "Delete"
+                            iconText: "🗑"
+                            variant: "danger"
+                            size: "sm"
+                            enabled: BackupCtrl.selectedSnapshotId !== "" && !BackupCtrl.isRestoring && !BackupCtrl.isDeleting
+                            onClicked: BackupCtrl.requestDeleteSnapshot(BackupCtrl.selectedSnapshotId)
                         }
                     }
 
@@ -386,10 +517,12 @@ ScrollView {
             }
         }
 
-        Item { height: Theme.spaceXl; Layout.fillWidth: true }
+        Item { height: Theme.spaceXxxl; Layout.fillWidth: true }
     }
 
-    // Restore Confirmation Dialog Modal Overlay
+    // ==========================================
+    // RESTORE CONFIRMATION DIALOG MODAL OVERLAY
+    // ==========================================
     Rectangle {
         id: restoreConfirmOverlay
         visible: BackupCtrl.showRestoreConfirmDialog
@@ -402,13 +535,11 @@ ScrollView {
             onClicked: BackupCtrl.cancelRestore()
         }
 
-        Rectangle {
+        PFCard {
             id: restoreModalCard
             width: Math.min(backupRoot.width - 48, 560)
-            height: 380
+            height: Math.min(backupRoot.height - 48, 420)
             anchors.centerIn: parent
-            radius: Theme.radiusLg
-            color: Theme.cardBg
             border.color: AppCtrl.safeMode ? Theme.accent : Theme.warning
             border.width: 1
 
@@ -417,135 +548,308 @@ ScrollView {
                 // absorb clicks inside card
             }
 
-            ColumnLayout {
+            ScrollView {
                 anchors.fill: parent
                 anchors.margins: Theme.spaceXl
-                spacing: Theme.spaceMd
+                clip: true
 
-                RowLayout {
-                    Layout.fillWidth: true
+                ColumnLayout {
+                    width: restoreModalCard.width - (Theme.spaceXl * 2) - 16
                     spacing: Theme.spaceMd
 
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spaceMd
+
+                        Rectangle {
+                            width: 36
+                            height: 36
+                            radius: Theme.radiusMd
+                            color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.15) : Qt.rgba(0.96, 0.62, 0.04, 0.15)
+                            border.color: AppCtrl.safeMode ? Theme.accent : Theme.warning
+                            border.width: 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: AppCtrl.safeMode ? "🛡" : "↩"
+                                font.pixelSize: 18
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                text: "Confirm Snapshot Restoration"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeLg
+                                font.weight: Font.DemiBold
+                                color: Theme.textPrimary
+                            }
+
+                            Text {
+                                text: "Target Snapshot: " + BackupCtrl.restoreTargetSnapshotId
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.fontSizeXs
+                                color: Theme.accentLight
+                            }
+                        }
+                    }
+
                     Rectangle {
-                        width: 36
-                        height: 36
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Theme.borderSubtle
+                    }
+
+                    // Warning / Info Note
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: restoreNoteCol.implicitHeight + 16
                         radius: Theme.radiusMd
-                        color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.15) : Qt.rgba(0.96, 0.62, 0.04, 0.15)
-                        border.color: AppCtrl.safeMode ? Theme.accent : Theme.warning
+                        color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.1) : Qt.rgba(0.96, 0.62, 0.04, 0.1)
+                        border.color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.25) : Qt.rgba(0.96, 0.62, 0.04, 0.25)
                         border.width: 1
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: AppCtrl.safeMode ? "🛡" : "↩"
-                            font.pixelSize: 18
+                        ColumnLayout {
+                            id: restoreNoteCol
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 4
+
+                            Text {
+                                text: AppCtrl.safeMode ? "Safe Mode Simulation:" : "Live Desktop Configuration Restore:"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSm
+                                font.weight: Font.DemiBold
+                                color: AppCtrl.safeMode ? Theme.accentLight : Theme.warning
+                            }
+                            Text {
+                                text: AppCtrl.safeMode
+                                    ? "Safe Mode is active. A simulated restore will verify SHA256 integrity and generate diffs without modifying live files."
+                                    : "PlasmaForge will automatically create a pre-restore safety snapshot before replacing live files. Post-restore SHA256 verification will confirm data integrity."
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeXs
+                                color: Theme.textSecondary
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
                         }
                     }
 
+                    // Metadata details
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 2
-
-                        Text {
-                            text: "Confirm Snapshot Restoration"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeLg
-                            font.weight: Font.DemiBold
-                            color: Theme.textPrimary
-                        }
-
-                        Text {
-                            text: "Target: " + BackupCtrl.restoreTargetSnapshotId + " (" + BackupCtrl.restoreTargetFileCount + " files)"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeSm
-                            color: Theme.accentLight
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.borderSubtle
-                }
-
-                // Safety Note
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: restoreNoteCol.implicitHeight + 16
-                    radius: Theme.radiusMd
-                    color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.1) : Qt.rgba(0.96, 0.62, 0.04, 0.1)
-                    border.color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.25) : Qt.rgba(0.96, 0.62, 0.04, 0.25)
-                    border.width: 1
-
-                    ColumnLayout {
-                        id: restoreNoteCol
-                        anchors.fill: parent
-                        anchors.margins: 10
                         spacing: 4
 
                         Text {
-                            text: AppCtrl.safeMode ? "Safe Mode Simulation:" : "Live Desktop Configuration Restore:"
+                            text: "Description: " + BackupCtrl.restoreTargetDescription
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeSm
-                            font.weight: Font.DemiBold
-                            color: AppCtrl.safeMode ? Theme.accentLight : Theme.warning
+                            color: Theme.textPrimary
                         }
                         Text {
-                            text: AppCtrl.safeMode
-                                ? "Safe Mode is active. A simulated restore will be performed without modifying your live configuration."
-                                : "A safety pre-restore backup will be created automatically before modifying any live files. Allowlisted KDE configuration files will be restored and verified against cryptographic SHA256 checksums."
+                            text: "Files in bundle: " + BackupCtrl.restoreTargetFileCount + " allowlisted configuration files"
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeXs
-                            color: Theme.textSecondary
-                            wrapMode: Text.WordWrap
-                            Layout.fillWidth: true
+                            color: Theme.textMuted
+                        }
+                    }
+
+                    Item { height: Theme.spaceSm; Layout.fillWidth: true }
+
+                    // Modal action buttons
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spaceMd
+
+                        Item { Layout.fillWidth: true }
+
+                        PFButton {
+                            text: "Cancel"
+                            variant: "outline"
+                            size: "md"
+                            onClicked: BackupCtrl.cancelRestore()
+                        }
+
+                        PFButton {
+                            text: AppCtrl.safeMode ? "Simulate Restore" : "Confirm Restore"
+                            iconText: AppCtrl.safeMode ? "🛡" : "↩"
+                            variant: "primary"
+                            size: "md"
+                            onClicked: BackupCtrl.confirmRestore()
                         }
                     }
                 }
+            }
+        }
+    }
 
-                // Description
+    // ==========================================
+    // DELETE CONFIRMATION DIALOG MODAL OVERLAY
+    // ==========================================
+    Rectangle {
+        id: deleteConfirmOverlay
+        visible: BackupCtrl.showDeleteConfirmDialog
+        anchors.fill: parent
+        color: Qt.rgba(0.04, 0.05, 0.07, 0.82)
+        z: 9999
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: BackupCtrl.cancelDelete()
+        }
+
+        PFCard {
+            id: deleteModalCard
+            width: Math.min(backupRoot.width - 48, 540)
+            height: Math.min(backupRoot.height - 48, 420)
+            anchors.centerIn: parent
+            border.color: Theme.danger
+            border.width: 1
+
+            MouseArea {
+                anchors.fill: parent
+                // absorb clicks inside card
+            }
+
+            ScrollView {
+                anchors.fill: parent
+                anchors.margins: Theme.spaceXl
+                clip: true
+
                 ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 4
-
-                    Text {
-                        text: "SNAPSHOT DESCRIPTION"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeXs
-                        font.weight: Font.DemiBold
-                        color: Theme.textMuted
-                    }
-
-                    Text {
-                        text: BackupCtrl.restoreTargetDescription || "Safe Snapshot"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textPrimary
-                    }
-                }
-
-                Item { Layout.fillHeight: true }
-
-                // Actions
-                RowLayout {
-                    Layout.fillWidth: true
+                    width: deleteModalCard.width - (Theme.spaceXl * 2) - 16
                     spacing: Theme.spaceMd
 
-                    Item { Layout.fillWidth: true }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spaceMd
 
-                    PFButton {
-                        text: "Cancel"
-                        variant: "secondary"
-                        size: "md"
-                        onClicked: BackupCtrl.cancelRestore()
+                        Rectangle {
+                            width: 36
+                            height: 36
+                            radius: Theme.radiusMd
+                            color: Qt.rgba(0.93, 0.27, 0.27, 0.15)
+                            border.color: Theme.danger
+                            border.width: 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "🗑"
+                                font.pixelSize: 18
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                text: "Permanently Delete Snapshot?"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeLg
+                                font.weight: Font.DemiBold
+                                color: Theme.textPrimary
+                            }
+
+                            Text {
+                                text: "Target: " + BackupCtrl.deleteTargetSnapshotId
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.fontSizeXs
+                                color: Theme.danger
+                            }
+                        }
                     }
 
-                    PFButton {
-                        text: AppCtrl.safeMode ? "Confirm Simulation" : "Restore Live Configuration"
-                        iconText: AppCtrl.safeMode ? "🛡" : "↩"
-                        variant: "primary"
-                        size: "md"
-                        onClicked: BackupCtrl.confirmRestore()
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Theme.borderSubtle
+                    }
+
+                    // Warning Box
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: deleteWarningCol.implicitHeight + 16
+                        radius: Theme.radiusMd
+                        color: Qt.rgba(0.93, 0.27, 0.27, 0.1)
+                        border.color: Qt.rgba(0.93, 0.27, 0.27, 0.25)
+                        border.width: 1
+
+                        ColumnLayout {
+                            id: deleteWarningCol
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 4
+
+                            Text {
+                                text: "Irreversible Deletion:"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSm
+                                font.weight: Font.DemiBold
+                                color: Theme.danger
+                            }
+                            Text {
+                                text: "This will permanently remove the snapshot directory, files, and manifest from ~/.local/share/plasmaforge/snapshots. This action cannot be undone."
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeXs
+                                color: Theme.textSecondary
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+
+                    // Snapshot summary metadata
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Text {
+                            text: "Description: " + (BackupCtrl.deleteTargetDescription || "Safe Snapshot")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSm
+                            color: Theme.textPrimary
+                        }
+                        Text {
+                            text: "Created: " + (BackupCtrl.deleteTargetCreatedAt || "Unknown")
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textMuted
+                        }
+                        Text {
+                            text: "Contents: " + BackupCtrl.deleteTargetFileCount + " files • " + BackupCtrl.deleteTargetSizeKb + " KB"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textMuted
+                        }
+                    }
+
+                    Item { height: Theme.spaceSm; Layout.fillWidth: true }
+
+                    // Modal action buttons
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spaceMd
+
+                        Item { Layout.fillWidth: true }
+
+                        PFButton {
+                            text: "Cancel"
+                            variant: "outline"
+                            size: "md"
+                            onClicked: BackupCtrl.cancelDelete()
+                        }
+
+                        PFButton {
+                            text: "Permanently Delete"
+                            iconText: "🗑"
+                            variant: "danger"
+                            size: "md"
+                            onClicked: BackupCtrl.confirmDelete()
+                        }
                     }
                 }
             }

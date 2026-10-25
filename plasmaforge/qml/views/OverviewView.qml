@@ -95,59 +95,68 @@ ScrollView {
                     color: Theme.borderSubtle
                 }
 
-                RowLayout {
+                Flow {
                     Layout.fillWidth: true
                     spacing: Theme.spaceMd
 
-                    Text {
-                        text: "Active Theme: "
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textMuted
-                    }
-                    Text {
-                        text: SystemCtrl.activeLookAndFeel
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeSm
-                        font.weight: Font.DemiBold
-                        color: Theme.accentLight
-                    }
-
-                    Text {
-                        text: "•   UI Font: "
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textMuted
-                    }
-                    Text {
-                        text: SystemCtrl.activeFont
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textPrimary
+                    RowLayout {
+                        spacing: 4
+                        Text {
+                            text: "Active Theme: "
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSm
+                            color: Theme.textMuted
+                        }
+                        Text {
+                            text: SystemCtrl.activeLookAndFeel
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSm
+                            font.weight: Font.DemiBold
+                            color: Theme.accentLight
+                        }
                     }
 
-                    Text {
-                        text: "•   Monospace: "
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textMuted
+                    RowLayout {
+                        spacing: 4
+                        Text {
+                            text: "•   UI Font: "
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSm
+                            color: Theme.textMuted
+                        }
+                        Text {
+                            text: SystemCtrl.activeFont
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSm
+                            color: Theme.textPrimary
+                        }
                     }
-                    Text {
-                        text: SystemCtrl.activeFixedFont
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.fontSizeSm
-                        color: Theme.textSecondary
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
+
+                    RowLayout {
+                        spacing: 4
+                        Text {
+                            text: "•   Monospace: "
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSm
+                            color: Theme.textMuted
+                        }
+                        Text {
+                            text: SystemCtrl.activeFixedFont
+                            font.family: Theme.fontMono
+                            font.pixelSize: Theme.fontSizeSm
+                            color: Theme.textSecondary
+                        }
                     }
                 }
             }
         }
 
         // Metrics Grid
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
-            spacing: Theme.spaceLg
+            columns: overviewRoot.width > 800 ? 3 : (overviewRoot.width > 540 ? 2 : 1)
+            columnSpacing: Theme.spaceLg
+            rowSpacing: Theme.spaceLg
 
             PFMetricCard {
                 Layout.fillWidth: true
@@ -315,11 +324,11 @@ ScrollView {
             Layout.fillWidth: true
             implicitHeight: toolsRow.implicitHeight + (Theme.spaceLg * 2)
 
-            RowLayout {
+            Flow {
                 id: toolsRow
                 anchors.fill: parent
                 anchors.margins: Theme.spaceLg
-                spacing: Theme.spaceXl
+                spacing: Theme.spaceLg
 
                 Text {
                     text: "KDE 6 System Binaries:"
@@ -348,10 +357,8 @@ ScrollView {
                     }
                 }
 
-                Item { Layout.fillWidth: true }
-
                 Text {
-                    text: "Arch Linux Kernel " + SystemCtrl.kernelVersion
+                    text: "•   Arch Linux Kernel " + SystemCtrl.kernelVersion
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeXs
                     color: Theme.textMuted
