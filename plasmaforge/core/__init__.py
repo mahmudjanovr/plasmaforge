@@ -13,6 +13,12 @@ from plasmaforge.core.adapter_boundary import (
 )
 
 from plasmaforge.core.color_scheme_applier import KdeColorSchemeApplier, ApplyResult
+from plasmaforge.core.transaction import (
+    ApplyOperation,
+    TransactionalSafetyEngine,
+    TransactionResult,
+    TransactionState,
+)
 
 __all__ = [
     "AppConfig",
@@ -30,4 +36,8 @@ __all__ = [
     "ConfigChangeSet",
     "KdeColorSchemeApplier",
     "ApplyResult",
+    "ApplyOperation",
+    "TransactionalSafetyEngine",
+    "TransactionResult",
+    "TransactionState",
 ]

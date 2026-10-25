@@ -103,7 +103,13 @@ class BackupManager:
     def create_snapshot(self, description: str = "Manual Safe Snapshot") -> SnapshotMetadata:
         """Create a sandboxed copy of existing KDE config files with cryptographic manifest."""
         now = datetime.now(timezone.utc)
-        snap_id = f"snap_{now.strftime('%Y%m%d_%H%M%S')}"
+        base_id = f"snap_{now.strftime('%Y%m%d_%H%M%S')}"
+        snap_id = base_id
+        counter = 1
+        while (self.backup_root / snap_id).exists():
+            snap_id = f"{base_id}_{counter}"
+            counter += 1
+
         snap_dir = self.backup_root / snap_id
         files_dir = snap_dir / "files"
         files_dir.mkdir(parents=True, exist_ok=True)

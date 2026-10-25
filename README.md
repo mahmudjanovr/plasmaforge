@@ -6,7 +6,7 @@ PlasmaForge is a high-performance, dark-first desktop customization studio engin
 
 ---
 
-## Architecture & Design (Phase 2)
+## Architecture & Design (Phase 3)
 
 PlasmaForge follows a strict separation of concerns between native presentation, application state, and configuration safety boundaries:
 
@@ -23,14 +23,15 @@ plasmaforge/
 │   │   ├── adapter_boundary.py     # Safe configuration change contract & DryRunAdapter
 │   │   ├── backup_manager.py       # Sandboxed cryptographic snapshots (SHA256 manifests & restore)
 │   │   ├── themes.py               # Discovery, active scheme detection & palette parsing
-│   │   ├── color_scheme_applier.py # Safe KDE color scheme applier with rollback & diff preview
+│   │   ├── transaction.py          # Reusable transactional safety layer, states & rollback engine
+│   │   ├── color_scheme_applier.py # KDE color scheme applier backed by TransactionalSafetyEngine
 │   │   └── presets.py              # Curated native desktop recipe catalog
 │   ├── controllers/                # QML presentation singletons (PlasmaForge.Controllers 1.0)
 │   │   ├── app_controller.py       # Active view navigation, safe mode, and status toasts
 │   │   ├── system_controller.py    # Exposes system metrics & KDE tools to QML
 │   │   ├── theme_controller.py     # Scheme selection, diff preview, confirmation & apply workflows
 │   │   ├── preset_controller.py    # Gallery preset inspector & dry-run diffs
-│   │   ├── backup_controller.py    # Snapshot creation, listing, integrity verification
+│   │   ├── backup_controller.py    # Snapshot creation, listing, integrity verification & safe restore
 │   │   └── settings_controller.py  # Preferences & dynamic safe mode toggle
 │   └── qml/                        # Qt Quick presentation layer
 │       ├── main.qml                # Main application window, sidebar shell & modal overlays
@@ -51,32 +52,43 @@ plasmaforge/
 │           ├── ThemeStudioView.qml # Live color scheme inspector, diff drawer & apply confirmation
 │           ├── DesktopBuilderView.qml
 │           ├── SetupGalleryView.qml
-│           ├── BackupRestoreView.qml
+│           ├── BackupRestoreView.qml# Snapshot manager & transactional restore modal
 │           ├── SettingsView.qml    # Dynamic Safe Mode / Live Mode configuration
 │           └── qmldir
-└── tests/                          # Automated pytest suite (30 tests)
+└── tests/                          # Automated pytest suite (42 tests)
     ├── test_config.py
     ├── test_system_info.py
     ├── test_adapter_boundary.py
     ├── test_backup_manager.py
     ├── test_themes_and_presets.py
     ├── test_color_scheme_applier.py
+    ├── test_transaction_safety.py  # 12 focused transactional apply & rollback tests
     ├── test_controllers.py
     └── test_qml_loading.py
 ```
 
 ---
 
-## Safety Foundation & Phase 2 Architecture
+## Phase 3 Transactional Safety Engine
 
-PlasmaForge is designed so that users never unknowingly mutate their live desktop:
+PlasmaForge enforces a reusable, transactional safety boundary across all customization operations:
 
-- **Explicit Safe Mode (Default)**: Safe Mode is enabled by default. While active, all theme applications simulate changes, generating real unified diffs and verified snapshots without modifying live KDE configurations.
-- **Pre-Apply Cryptographic Backups**: Before applying any scheme in Live Mode, PlasmaForge creates a full cryptographic snapshot of `kdeglobals` and verifies its SHA256 integrity on disk before executing any tool.
-- **Strict Input Validation & Whitelisting**: Color scheme identifiers must match alphanumeric/standard name characters (`[a-zA-Z0-9_-]+`) and exist in the discovered installed schemes list.
-- **No Shell Execution**: System commands are invoked strictly using vector arguments (`subprocess.run(["plasma-apply-colorscheme", scheme_id], shell=False)`) with a 15-second execution timeout.
-- **Automatic Failure Rollback**: If `plasma-apply-colorscheme` exits non-zero or times out, the applier immediately rolls back `kdeglobals` from the verified pre-apply snapshot and reports a meaningful error.
-- **One-Click Restore**: The UI retains the pre-apply snapshot ID and previous scheme name, allowing users to instantly restore their previous color scheme with SHA256 integrity verification.
+1. **Target Allowlisting & Path Sanitization**:
+   - Only allowlisted KDE configuration files (`kdeglobals`, `plasmarc`, `plasma-org.kde.plasma.desktop-appletsrc`, `kwinrc`, `kglobalshortcutsrc`) located within the user's configuration root can be targeted.
+   - Any attempt to target non-allowlisted files or traverse directories (`../../etc/shadow`) is strictly rejected during validation.
+
+2. **Unified 6-Stage Apply Workflow**:
+   - **Stage 1 (Validation & Preview)**: Validates target files, prerequisites, and computes exact unified diffs.
+   - **Stage 2 (Safe Mode Check)**: Safe Mode is enabled by default. In Safe Mode, operations generate simulated diffs and test snapshots without modifying live system files.
+   - **Stage 3 (Pre-Apply Cryptographic Backup)**: In Live Mode, an automatic snapshot is created and its SHA256 hashes are verified on disk before any mutation is attempted. If backup verification fails, the operation aborts immediately.
+   - **Stage 4 (Explicit Confirmation)**: Live Mode strictly requires explicit user confirmation via an in-window modal before touching live files.
+   - **Stage 5 (Safe Execution)**: System utilities (e.g. `plasma-apply-colorscheme`) are executed using argument vectors (`shell=False`) with execution timeouts.
+   - **Stage 6 (Post-Apply Verification & Rollback)**: Success is never reported before verification. If the tool crashes, times out, or fails post-apply verification, the engine automatically rolls back `~/.config` to the pre-apply snapshot.
+
+3. **Safe Manual Snapshot Restoration**:
+   - Snapshot manifests and file SHA256 hashes are verified before restoring. Corrupted or tampered snapshots are refused with clear error explanations.
+   - An automatic pre-restore safety snapshot of the live configuration is created before writing restored files.
+   - Post-restore verification verifies that restored files match the snapshot hashes.
 
 ---
 
@@ -92,8 +104,8 @@ PlasmaForge is designed so that users never unknowingly mutate their live deskto
    - Palette role swatches (Window BG/FG, View BG/FG, Selection, Buttons).
    - Dynamic Active Scheme detection (displays an "Active" badge and disables re-applying identical themes).
    - **Preview Changes (Diff)**: Slide-out drawer displaying an exact unified diff of `kdeglobals` prior to application.
-   - **Confirmation Modal**: Clear in-window confirmation identifying the selected scheme, backup location, and active execution mode (Safe Mode vs Live Mode).
-   - **Apply & Restore**: Apply color scheme via `plasma-apply-colorscheme`, with toast notifications and one-click restoration of the previous scheme.
+   - **Confirmation Modal**: Clear in-window confirmation identifying the selected scheme, backup location, active mode, and safety pipeline badges.
+   - **Apply & Restore**: Apply color scheme via `plasma-apply-colorscheme` backed by the `TransactionalSafetyEngine`, with toast notifications and one-click restoration of the previous scheme.
 
 3. **Desktop Builder**:
    - Interactive schematic preview of the primary Wayland display layout, taskbar, dock, and applet regions.
@@ -105,10 +117,10 @@ PlasmaForge is designed so that users never unknowingly mutate their live deskto
    - Changeset Dry-Run Inspector: generates exact unified diffs of proposed configuration adjustments via the `DryRunAdapter`.
 
 5. **Backups & Restore**:
-   - Versioned snapshot creation of critical KDE Plasma configuration files.
+   - Versioned snapshot creation of critical KDE Plasma configuration files with unique monotonic identifiers.
    - List of stored snapshots with timestamp, file count, and size in KB.
    - Cryptographic SHA256 integrity verification tool.
-   - Restore snapshots with safe file-whitelist validation and diff preview.
+   - **Transactional Restore**: In-window confirmation modal, pre-restore safety snapshot, SHA256 verification, and live restoration.
 
 6. **Settings**:
    - **Safe Mode Toggle**: Clearly toggle between Safe Mode (simulated dry-run previews) and Live Mode (verified real KDE desktop modifications).
@@ -168,8 +180,18 @@ The test suite validates:
 - Configuration parsing, default values, and dynamic safe mode toggling
 - Safe system information detection and fallback behavior
 - Adapter boundary validation, identifier whitelisting, and dry-run execution
-- Backup snapshot creation, SHA256 integrity verification, and safe file restoration
+- Backup snapshot creation, unique monotonic snapshot IDs, and SHA256 integrity verification
 - Color extraction, installed scheme discovery, and active scheme detection
-- ColorSchemeApplier validation, diff preview generation, pre-apply snapshot creation, live execution, rollback on failure, and restore
-- Controller state transitions, theme application workflow, and navigation signals
-- Headless QML engine loading and view switching (30 tests passing)
+- ColorSchemeApplier refactoring with transactional safety delegation
+- Reusable TransactionalSafetyEngine: happy path, apply failure rollback, verification failure rollback, backup corruption abort, rollback failure handling, safe mode protection, unconfirmed live mode protection, and unsafe target rejection (12 focused tests)
+- Safe manual snapshot restoration with pre-restore safety snapshot and post-restore SHA256 verification
+- Controller state transitions, theme application workflow, and backup restore modal transitions
+- Headless QML engine loading and view switching (42 tests passing)
+
+---
+
+## Known Real-World Limitations
+
+- **Session Context**: Real-time theme notifications rely on the running KDE Plasma session and DBus. In isolated headless or mock environments without a running `plasmashell`, configuration files are safely updated on disk, but live broadcast events will not be received by external windows.
+- **Scope Restriction**: PlasmaForge Phase 3 exclusively manages allowlisted desktop configurations (`kdeglobals`, `plasmarc`, `plasma-org.kde.plasma.desktop-appletsrc`, `kwinrc`, `kglobalshortcutsrc`). It intentionally does not touch non-KDE user configurations (e.g. bashrc, browser data, desktop files).
+- **Rollback Guarantees**: Automatic rollback guarantees exact byte-for-byte restoration of allowlisted configuration files verified by SHA256 checksums. It cannot revert external side-effects produced by third-party processes outside KDE configuration files.

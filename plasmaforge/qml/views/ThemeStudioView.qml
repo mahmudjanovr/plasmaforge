@@ -623,9 +623,87 @@ Item {
                     }
                 }
 
+                // Transactional Pipeline Steps
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Rectangle {
+                        height: 22
+                        radius: Theme.radiusSm
+                        color: Qt.rgba(1, 1, 1, 0.04)
+                        border.color: Theme.borderSubtle
+                        border.width: 1
+                        Layout.fillWidth: true
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "1. Preview Diff"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                            color: Theme.textMuted
+                        }
+                    }
+
+                    Rectangle {
+                        height: 22
+                        radius: Theme.radiusSm
+                        color: Qt.rgba(0.08, 0.72, 0.65, 0.1)
+                        border.color: Qt.rgba(0.08, 0.72, 0.65, 0.25)
+                        border.width: 1
+                        Layout.fillWidth: true
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "2. SHA256 Backup"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                            color: Theme.accentLight
+                        }
+                    }
+
+                    Rectangle {
+                        height: 22
+                        radius: Theme.radiusSm
+                        color: Qt.rgba(1, 1, 1, 0.04)
+                        border.color: Theme.borderSubtle
+                        border.width: 1
+                        Layout.fillWidth: true
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "3. Apply (shell=False)"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                            color: Theme.textMuted
+                        }
+                    }
+
+                    Rectangle {
+                        height: 22
+                        radius: Theme.radiusSm
+                        color: Qt.rgba(0.08, 0.72, 0.65, 0.1)
+                        border.color: Qt.rgba(0.08, 0.72, 0.65, 0.25)
+                        border.width: 1
+                        Layout.fillWidth: true
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "4. Verify & Rollback"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                            color: Theme.accentLight
+                        }
+                    }
+                }
+
                 // Diff preview block
                 Text {
-                    text: "INTENDED CONFIGURATION CHANGES"
+                    text: "INTENDED CONFIGURATION CHANGES (TARGET: ~/.config/kdeglobals)"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeXs
                     font.weight: Font.DemiBold

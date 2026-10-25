@@ -1,11 +1,12 @@
 """Safe, verified KDE Plasma 6 color scheme application engine.
 
-Enforces:
+Refactored in Phase 3 to use the unified TransactionalSafetyEngine:
 1. Strict scheme identifier validation and whitelist matching
 2. Automatic pre-apply cryptographic snapshot creation and verification
 3. Safe Mode simulation enforcement
 4. Non-shell argument vector execution of plasma-apply-colorscheme
-5. Automatic rollback on execution failure
+5. Post-apply verification of ~/.config/kdeglobals
+6. Automatic rollback on execution failure or verification failure
 """
 
 from __future__ import annotations
@@ -20,8 +21,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
-from plasmaforge.core.backup_manager import BackupManager, SnapshotMetadata
+from plasmaforge.core.backup_manager import BackupManager
 from plasmaforge.core.themes import detect_active_color_scheme
+from plasmaforge.core.transaction import (
+    ApplyOperation,
+    TransactionalSafetyEngine,
+    TransactionResult,
+    TransactionState,
+)
 
 SAFE_SCHEME_PATTERN = re.compile(r"^[A-Za-z0-9_.\-]+$")
 
@@ -57,6 +64,11 @@ class KdeColorSchemeApplier:
             Path.home() / ".local" / "share" / "color-schemes",
             Path("/usr/share/color-schemes"),
         ]
+        self.safety_engine = TransactionalSafetyEngine(
+            backup_manager=self.backup_manager,
+            safe_mode=self.safe_mode,
+            source_config_dir=self.source_config_dir,
+        )
 
     def find_scheme_file(self, scheme_id: str) -> Optional[Path]:
         """Find corresponding .colors file for a scheme identifier."""
@@ -175,7 +187,6 @@ class KdeColorSchemeApplier:
             if not diff_lines:
                 return f"# Color scheme '{scheme_id}' matches current configuration palette. No changes required."
 
-            # Header
             header = [
                 f"# Unified Diff Preview: Color Scheme '{scheme_id}'",
                 f"# Source file: {file_path}",
@@ -202,10 +213,10 @@ class KdeColorSchemeApplier:
         scheme_id: str,
         force_safe_mode: Optional[bool] = None,
     ) -> ApplyResult:
-        """Apply color scheme with pre-apply backup and safe failure rollback."""
+        """Apply color scheme using the shared transactional safety workflow."""
         is_safe = self.safe_mode if force_safe_mode is None else force_safe_mode
 
-        # 1. Validation
+        # 1. Validation of scheme definition
         valid, file_path, error_msg = self.validate_scheme(scheme_id)
         if not valid:
             return ApplyResult(
@@ -233,7 +244,7 @@ class KdeColorSchemeApplier:
                 is_dry_run=is_safe,
             )
 
-        # 3. Check KDE tool
+        # 3. Check KDE tool existence
         tool = self.tool_binary
         if not tool or not Path(tool).is_file():
             return ApplyResult(
@@ -243,90 +254,67 @@ class KdeColorSchemeApplier:
                 diff_preview=diff_text,
             )
 
-        # 4. Handle Safe Mode (Simulation)
-        if is_safe:
-            # Create a verified test snapshot in safe mode to verify backup subsystem
-            test_meta = self.backup_manager.create_snapshot(
-                f"Safe Mode Simulation: Before applying {scheme_id}"
-            )
-            return ApplyResult(
-                success=True,
-                message=f"Safe Mode active: Simulated applying '{scheme_id}'. Live desktop session was not modified.",
-                scheme_id=scheme_id,
-                backup_id=test_meta.id,
-                is_dry_run=True,
-                diff_preview=diff_text,
-            )
+        # 4. Construct ApplyOperation for TransactionalSafetyEngine
+        def apply_step() -> tuple[bool, str]:
+            try:
+                proc = self._execute_apply_command(tool, scheme_id)
+            except subprocess.TimeoutExpired:
+                return False, "KDE tool execution timed out after 8 seconds."
+            except Exception as e:
+                return False, f"Failed to execute KDE color scheme tool: {e}"
 
-        # 5. Live Mode Execution: Create Verified Pre-Apply Backup First
-        backup_desc = f"Automatic Pre-Apply: Before applying '{scheme_id}'"
-        try:
-            backup_meta = self.backup_manager.create_snapshot(backup_desc)
-            valid_backup, errors = self.backup_manager.verify_snapshot_integrity(
-                backup_meta.id
-            )
-            if not valid_backup:
-                return ApplyResult(
-                    success=False,
-                    message=f"Pre-apply backup integrity verification failed ({'; '.join(errors)}). Application aborted for safety.",
-                    scheme_id=scheme_id,
-                    diff_preview=diff_text,
-                )
-        except Exception as e:
-            return ApplyResult(
-                success=False,
-                message=f"Failed to create pre-apply backup: {e}. Application aborted for safety.",
-                scheme_id=scheme_id,
-                diff_preview=diff_text,
-            )
+            if proc.returncode != 0:
+                err = proc.stderr.strip() or proc.stdout.strip() or f"exit code {proc.returncode}"
+                return False, f"KDE color scheme application failed ({err})"
 
-        # 6. Execute plasma-apply-colorscheme via argument vector (NO shell=True)
-        try:
-            proc = self._execute_apply_command(tool, scheme_id)
-        except subprocess.TimeoutExpired:
-            # Timeout: attempt rollback
-            self.backup_manager.restore_snapshot(backup_meta.id, ["kdeglobals"])
-            return ApplyResult(
-                success=False,
-                message="KDE tool execution timed out after 8 seconds. Configuration was rolled back.",
-                scheme_id=scheme_id,
-                backup_id=backup_meta.id,
-                rolled_back=True,
-                diff_preview=diff_text,
-            )
-        except Exception as e:
-            # Exception: attempt rollback
-            self.backup_manager.restore_snapshot(backup_meta.id, ["kdeglobals"])
-            return ApplyResult(
-                success=False,
-                message=f"Failed to execute KDE color scheme tool: {e}. Configuration was rolled back.",
-                scheme_id=scheme_id,
-                backup_id=backup_meta.id,
-                rolled_back=True,
-                diff_preview=diff_text,
-            )
+            return True, "Executed"
 
-        # 7. Check result
-        if proc.returncode != 0:
-            err = proc.stderr.strip() or proc.stdout.strip() or f"exit code {proc.returncode}"
-            # Rollback to pre-apply snapshot
-            rb_ok, rb_msg = self.backup_manager.restore_snapshot(
-                backup_meta.id, ["kdeglobals"]
-            )
-            return ApplyResult(
-                success=False,
-                message=f"KDE color scheme application failed ({err}). Automatic rollback: {rb_msg}",
-                scheme_id=scheme_id,
-                backup_id=backup_meta.id,
-                rolled_back=rb_ok,
-                diff_preview=diff_text,
-            )
+        def verify_step() -> tuple[bool, str]:
+            # Post-apply verification: ensure kdeglobals exists and has valid configuration
+            kdeglobals = self.source_config_dir / "kdeglobals"
+            if not kdeglobals.is_file():
+                return False, "Configuration file kdeglobals missing after apply."
+            try:
+                cfg = configparser.ConfigParser(interpolation=None)
+                cfg.optionxform = str
+                cfg.read(kdeglobals, encoding="utf-8")
+                if cfg.has_option("General", "ColorScheme"):
+                    val = cfg.get("General", "ColorScheme")
+                    if val.lower() == scheme_id.lower():
+                        return True, "Verified"
+                if cfg.sections():
+                    return True, "Verified"
+                return False, "kdeglobals contains no valid sections after apply."
+            except Exception as e:
+                return False, f"Verification failed to parse kdeglobals: {e}"
+
+        operation = ApplyOperation(
+            id=f"apply_colorscheme_{scheme_id}",
+            title=f"Apply KDE Color Scheme '{scheme_id}'",
+            description=f"Applies color scheme '{scheme_id}' using plasma-apply-colorscheme",
+            affected_files=["kdeglobals"],
+            diff_preview=diff_text,
+            validate_fn=lambda: (True, "Valid"),
+            apply_fn=apply_step,
+            verify_fn=verify_step,
+        )
+
+        # 5. Execute transactionally
+        self.safety_engine.safe_mode = self.safe_mode
+        self.safety_engine.source_config_dir = self.source_config_dir
+        tx_result: TransactionResult = self.safety_engine.execute(
+            operation,
+            confirmed=True,
+            force_safe_mode=force_safe_mode,
+        )
 
         return ApplyResult(
-            success=True,
-            message=f"Successfully applied KDE color scheme '{scheme_id}'.",
+            success=tx_result.success,
+            message=tx_result.message,
             scheme_id=scheme_id,
-            backup_id=backup_meta.id,
+            backup_id=tx_result.backup_id,
+            rolled_back=tx_result.rolled_back,
+            is_dry_run=tx_result.is_dry_run,
             diff_preview=diff_text,
         )
 
@@ -335,12 +323,21 @@ class KdeColorSchemeApplier:
         backup_id: str,
         target_scheme_id: Optional[str] = None,
     ) -> tuple[bool, str]:
-        """Restore configuration from a snapshot and optionally re-apply scheme to session."""
-        ok, msg = self.backup_manager.restore_snapshot(backup_id, ["kdeglobals"])
-        if not ok:
-            return False, f"Failed to restore backup '{backup_id}': {msg}"
+        """Restore configuration from a snapshot transactionally and notify session."""
+        self.safety_engine.safe_mode = self.safe_mode
+        self.safety_engine.source_config_dir = self.source_config_dir
 
-        # If a scheme ID is known and tool is available, re-run tool to notify running apps
+        tx_result = self.safety_engine.restore_snapshot_transactionally(
+            snap_id=backup_id,
+            file_whitelist=["kdeglobals"],
+            confirmed=True,
+            force_safe_mode=False,
+        )
+
+        if not tx_result.success:
+            return False, f"Failed to restore backup '{backup_id}': {tx_result.message}"
+
+        # If target scheme ID is known and tool is available, re-run tool to notify running apps
         if target_scheme_id and self.tool_binary:
             valid, _, _ = self.validate_scheme(target_scheme_id)
             if valid:

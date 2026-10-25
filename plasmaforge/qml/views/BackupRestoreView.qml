@@ -302,6 +302,15 @@ ScrollView {
                                 AppCtrl.showToast("Dry-run comparison against live files updated.", "info")
                             }
                         }
+
+                        PFButton {
+                            text: "Restore Snapshot"
+                            iconText: "↩"
+                            variant: "primary"
+                            size: "sm"
+                            enabled: BackupCtrl.selectedSnapshotId !== "" && !BackupCtrl.isRestoring
+                            onClicked: BackupCtrl.requestRestoreSnapshot(BackupCtrl.selectedSnapshotId)
+                        }
                     }
 
                     // Integrity Status Pill
@@ -366,7 +375,7 @@ ScrollView {
                     }
 
                     Text {
-                        text: "🛡️ Safety Guarantee: Phase 1 strictly forbids destructive overwrites. Restoring configurations operates purely in dry-run comparison mode."
+                        text: "🛡️ Safety Guarantee: PlasmaForge Phase 3 transactional safety creates a pre-restore backup, verifies SHA256 integrity manifests, and performs post-restore verification before committing any changes."
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeXs
                         color: Theme.textMuted
@@ -378,5 +387,168 @@ ScrollView {
         }
 
         Item { height: Theme.spaceXl; Layout.fillWidth: true }
+    }
+
+    // Restore Confirmation Dialog Modal Overlay
+    Rectangle {
+        id: restoreConfirmOverlay
+        visible: BackupCtrl.showRestoreConfirmDialog
+        anchors.fill: parent
+        color: Qt.rgba(0.04, 0.05, 0.07, 0.78)
+        z: 9999
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: BackupCtrl.cancelRestore()
+        }
+
+        Rectangle {
+            id: restoreModalCard
+            width: Math.min(backupRoot.width - 48, 560)
+            height: 380
+            anchors.centerIn: parent
+            radius: Theme.radiusLg
+            color: Theme.cardBg
+            border.color: AppCtrl.safeMode ? Theme.accent : Theme.warning
+            border.width: 1
+
+            MouseArea {
+                anchors.fill: parent
+                // absorb clicks inside card
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: Theme.spaceXl
+                spacing: Theme.spaceMd
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceMd
+
+                    Rectangle {
+                        width: 36
+                        height: 36
+                        radius: Theme.radiusMd
+                        color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.15) : Qt.rgba(0.96, 0.62, 0.04, 0.15)
+                        border.color: AppCtrl.safeMode ? Theme.accent : Theme.warning
+                        border.width: 1
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: AppCtrl.safeMode ? "🛡" : "↩"
+                            font.pixelSize: 18
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+
+                        Text {
+                            text: "Confirm Snapshot Restoration"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeLg
+                            font.weight: Font.DemiBold
+                            color: Theme.textPrimary
+                        }
+
+                        Text {
+                            text: "Target: " + BackupCtrl.restoreTargetSnapshotId + " (" + BackupCtrl.restoreTargetFileCount + " files)"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSm
+                            color: Theme.accentLight
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Theme.borderSubtle
+                }
+
+                // Safety Note
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: restoreNoteCol.implicitHeight + 16
+                    radius: Theme.radiusMd
+                    color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.1) : Qt.rgba(0.96, 0.62, 0.04, 0.1)
+                    border.color: AppCtrl.safeMode ? Qt.rgba(0.08, 0.72, 0.65, 0.25) : Qt.rgba(0.96, 0.62, 0.04, 0.25)
+                    border.width: 1
+
+                    ColumnLayout {
+                        id: restoreNoteCol
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 4
+
+                        Text {
+                            text: AppCtrl.safeMode ? "Safe Mode Simulation:" : "Live Desktop Configuration Restore:"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSm
+                            font.weight: Font.DemiBold
+                            color: AppCtrl.safeMode ? Theme.accentLight : Theme.warning
+                        }
+                        Text {
+                            text: AppCtrl.safeMode
+                                ? "Safe Mode is active. A simulated restore will be performed without modifying your live configuration."
+                                : "A safety pre-restore backup will be created automatically before modifying any live files. Allowlisted KDE configuration files will be restored and verified against cryptographic SHA256 checksums."
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textSecondary
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                        }
+                    }
+                }
+
+                // Description
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+
+                    Text {
+                        text: "SNAPSHOT DESCRIPTION"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeXs
+                        font.weight: Font.DemiBold
+                        color: Theme.textMuted
+                    }
+
+                    Text {
+                        text: BackupCtrl.restoreTargetDescription || "Safe Snapshot"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSm
+                        color: Theme.textPrimary
+                    }
+                }
+
+                Item { Layout.fillHeight: true }
+
+                // Actions
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceMd
+
+                    Item { Layout.fillWidth: true }
+
+                    PFButton {
+                        text: "Cancel"
+                        variant: "secondary"
+                        size: "md"
+                        onClicked: BackupCtrl.cancelRestore()
+                    }
+
+                    PFButton {
+                        text: AppCtrl.safeMode ? "Confirm Simulation" : "Restore Live Configuration"
+                        iconText: AppCtrl.safeMode ? "🛡" : "↩"
+                        variant: "primary"
+                        size: "md"
+                        onClicked: BackupCtrl.confirmRestore()
+                    }
+                }
+            }
+        }
     }
 }

@@ -74,6 +74,12 @@ def create_application(argv: list[str] | None = None) -> tuple[QGuiApplication, 
             app_ctrl.showToast(msg, "success" if ok else "error"),
         )
     )
+    backup_ctrl.snapshotOperationCompleted.connect(
+        lambda msg, ok: (
+            system_ctrl.refresh(),
+            app_ctrl.showToast(msg, "success" if ok else "error"),
+        )
+    )
 
     engine = QQmlApplicationEngine()
 
