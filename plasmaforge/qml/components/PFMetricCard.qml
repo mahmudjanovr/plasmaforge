@@ -12,10 +12,11 @@ PFCard {
     property string badgeVariant: "neutral"
 
     implicitWidth: 200
-    implicitHeight: 90
+    implicitHeight: Math.max(90, metricContent.implicitHeight + (Theme.spaceLg * 2))
     hoverable: true
 
     ColumnLayout {
+        id: metricContent
         anchors.fill: parent
         anchors.margins: Theme.spaceLg
         spacing: Theme.spaceXs

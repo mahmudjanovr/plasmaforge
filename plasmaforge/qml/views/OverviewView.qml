@@ -5,17 +5,26 @@ import PlasmaForge.Controllers 1.0
 import plasmaforge.qml.theme 1.0
 import plasmaforge.qml.components 1.0
 
-ScrollView {
+Item {
     id: overviewRoot
-    contentWidth: availableWidth
-    clip: true
 
-    ColumnLayout {
-        width: Math.min(overviewRoot.width - (Theme.spaceXxl * 2), 1100)
-        anchors.horizontalCenter: parent.horizontalCenter
-        spacing: Theme.spaceXl
+    ScrollView {
+        id: overviewScrollView
+        anchors.fill: parent
+        contentWidth: availableWidth
+        clip: true
 
-        Item { height: Theme.spaceXs; Layout.fillWidth: true }
+        Item {
+            width: overviewScrollView.availableWidth
+            implicitHeight: overviewMainCol.implicitHeight + Theme.spaceXl * 2
+
+            ColumnLayout {
+                id: overviewMainCol
+                width: Math.min(parent.width - (Theme.spaceXxl * 2), 1100)
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Theme.spaceXl
+
+                Item { height: Theme.spaceXs; Layout.fillWidth: true }
 
         // Hero System Status Card
         PFCard {
@@ -28,9 +37,11 @@ ScrollView {
                 anchors.margins: Theme.spaceXl
                 spacing: Theme.spaceMd
 
-                RowLayout {
+                GridLayout {
                     Layout.fillWidth: true
-                    spacing: Theme.spaceMd
+                    columns: overviewRoot.width > 680 ? 3 : 1
+                    columnSpacing: Theme.spaceMd
+                    rowSpacing: Theme.spaceSm
 
                     Rectangle {
                         width: 44
@@ -52,7 +63,8 @@ ScrollView {
                         Layout.fillWidth: true
                         spacing: 2
 
-                        RowLayout {
+                        Flow {
+                            Layout.fillWidth: true
                             spacing: Theme.spaceSm
 
                             Text {
@@ -83,6 +95,7 @@ ScrollView {
                         iconText: "🛡"
                         variant: "primary"
                         size: "sm"
+                        Layout.alignment: overviewRoot.width > 680 ? Qt.AlignRight : Qt.AlignLeft
                         onClicked: {
                             BackupCtrl.createSnapshot("Overview Quick Snapshot")
                         }
@@ -154,7 +167,7 @@ ScrollView {
         // Metrics Grid
         GridLayout {
             Layout.fillWidth: true
-            columns: overviewRoot.width > 800 ? 3 : (overviewRoot.width > 540 ? 2 : 1)
+            columns: overviewRoot.width > 700 ? 3 : (overviewRoot.width > 480 ? 2 : 1)
             columnSpacing: Theme.spaceLg
             rowSpacing: Theme.spaceLg
 
@@ -194,7 +207,7 @@ ScrollView {
 
         GridLayout {
             Layout.fillWidth: true
-            columns: overviewRoot.width > 780 ? 3 : 1
+            columns: overviewRoot.width > 700 ? 3 : 1
             columnSpacing: Theme.spaceLg
             rowSpacing: Theme.spaceLg
 
@@ -367,5 +380,7 @@ ScrollView {
         }
 
         Item { height: Theme.spaceXl; Layout.fillWidth: true }
+            }
+        }
     }
 }

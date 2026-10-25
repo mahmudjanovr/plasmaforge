@@ -5,17 +5,26 @@ import PlasmaForge.Controllers 1.0
 import plasmaforge.qml.theme 1.0
 import plasmaforge.qml.components 1.0
 
-ScrollView {
+Item {
     id: settingsRoot
-    contentWidth: availableWidth
-    clip: true
 
-    ColumnLayout {
-        width: Math.min(settingsRoot.width - (Theme.spaceXxl * 2), 1100)
-        anchors.horizontalCenter: parent.horizontalCenter
-        spacing: Theme.spaceXl
+    ScrollView {
+        id: settingsScrollView
+        anchors.fill: parent
+        contentWidth: availableWidth
+        clip: true
 
-        Item { height: Theme.spaceXs; Layout.fillWidth: true }
+        Item {
+            width: settingsScrollView.availableWidth
+            implicitHeight: settingsMainCol.implicitHeight + Theme.spaceXl * 2
+
+            ColumnLayout {
+                id: settingsMainCol
+                width: Math.min(parent.width - (Theme.spaceXxl * 2), 1100)
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Theme.spaceXl
+
+                Item { height: Theme.spaceXs; Layout.fillWidth: true }
 
         PFSectionHeader {
             title: "Settings & Architecture Diagnostics"
@@ -119,12 +128,15 @@ ScrollView {
                 }
 
                 // Backup Directory Row
-                RowLayout {
+                GridLayout {
                     Layout.fillWidth: true
-                    spacing: Theme.spaceLg
+                    columns: settingsRoot.width > 680 ? 2 : 1
+                    columnSpacing: Theme.spaceLg
+                    rowSpacing: Theme.spaceSm
 
                     ColumnLayout {
-                        Layout.preferredWidth: 260
+                        Layout.preferredWidth: settingsRoot.width > 680 ? 240 : -1
+                        Layout.fillWidth: settingsRoot.width <= 680
                         spacing: 2
                         Text {
                             text: "Snapshot Storage Location"
@@ -291,5 +303,7 @@ ScrollView {
         }
 
         Item { height: Theme.spaceXl; Layout.fillWidth: true }
+            }
+        }
     }
 }

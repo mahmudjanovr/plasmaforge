@@ -10,12 +10,13 @@ Item {
     default property alias actions: actionContainer.children
 
     Layout.fillWidth: true
-    implicitWidth: parent ? parent.width : 400
-    implicitHeight: Math.max(48, headerLayout.implicitHeight)
+    implicitHeight: headerLayout.implicitHeight
 
     GridLayout {
         id: headerLayout
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
         columns: headerRoot.width > 760 ? 2 : 1
         columnSpacing: Theme.spaceLg
         rowSpacing: Theme.spaceSm
@@ -45,9 +46,10 @@ Item {
             }
         }
 
-        RowLayout {
+        Flow {
             id: actionContainer
             spacing: Theme.spaceSm
+            Layout.fillWidth: headerRoot.width <= 760
             Layout.alignment: headerRoot.width > 760 ? (Qt.AlignRight | Qt.AlignVCenter) : Qt.AlignLeft
         }
     }

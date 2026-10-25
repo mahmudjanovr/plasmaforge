@@ -25,10 +25,17 @@ Item {
         contentWidth: availableWidth
         clip: true
 
-        ColumnLayout {
-            width: Math.min(scrollView.width - (Theme.spaceXxl * 2), 1100)
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: Theme.spaceXl
+        Item {
+            width: scrollView.availableWidth
+            implicitHeight: themeMainCol.implicitHeight + (Theme.spaceXl * 2)
+
+            ColumnLayout {
+                id: themeMainCol
+                width: Math.min(parent.width - (Theme.spaceXxl * 2), 1140)
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: Theme.spaceLg
+                spacing: Theme.spaceXl
 
             Item { height: Theme.spaceXs; Layout.fillWidth: true }
 
@@ -69,15 +76,16 @@ Item {
             // Responsive Two-column layout: Schemes list on left, Palette detail on right
             GridLayout {
                 Layout.fillWidth: true
-                columns: themeStudioRoot.width > 900 ? 2 : 1
+                columns: themeStudioRoot.width > 760 ? 2 : 1
                 columnSpacing: Theme.spaceLg
                 rowSpacing: Theme.spaceLg
 
                 // Left: Color Schemes list
                 PFCard {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: themeStudioRoot.width > 900 ? 360 : 1
-                    implicitHeight: themeStudioRoot.width > 900 ? 520 : 380
+                    Layout.preferredWidth: themeStudioRoot.width > 760 ? 360 : -1
+                    Layout.maximumWidth: themeStudioRoot.width > 760 ? 400 : -1
+                    Layout.fillWidth: themeStudioRoot.width <= 760
+                    implicitHeight: themeStudioRoot.width > 760 ? 520 : 380
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -189,9 +197,11 @@ Item {
                 // Right: Selected Scheme Palette Inspector & Action Center
                 PFCard {
                     Layout.fillWidth: true
-                    implicitHeight: themeStudioRoot.width > 900 ? 520 : -1
+                    Layout.minimumWidth: themeStudioRoot.width > 760 ? 340 : -1
+                    implicitHeight: themeStudioRoot.width > 760 ? Math.max(520, rightCardCol.implicitHeight + (Theme.spaceXl * 2)) : (rightCardCol.implicitHeight + (Theme.spaceXl * 2))
 
                     ColumnLayout {
+                        id: rightCardCol
                         anchors.fill: parent
                         anchors.margins: Theme.spaceXl
                         spacing: Theme.spaceMd
@@ -528,6 +538,7 @@ Item {
 
             Item { height: Theme.spaceXl; Layout.fillWidth: true }
         }
+    }
     }
 
     // ==========================================

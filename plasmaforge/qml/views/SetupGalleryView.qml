@@ -5,10 +5,8 @@ import PlasmaForge.Controllers 1.0
 import plasmaforge.qml.theme 1.0
 import plasmaforge.qml.components 1.0
 
-ScrollView {
+Item {
     id: galleryRoot
-    contentWidth: availableWidth
-    clip: true
 
     Connections {
         target: PresetCtrl
@@ -20,10 +18,23 @@ ScrollView {
     property bool showImportModal: false
     property int importTab: 0 // 0: File Path, 1: JSON Text
 
-    ColumnLayout {
-        width: Math.min(galleryRoot.width - (Theme.spaceXxl * 2), 1140)
-        anchors.horizontalCenter: parent.horizontalCenter
-        spacing: Theme.spaceXl
+    ScrollView {
+        id: galleryScrollView
+        anchors.fill: parent
+        contentWidth: availableWidth
+        clip: true
+
+        Item {
+            width: galleryScrollView.availableWidth
+        implicitHeight: galleryMainCol.implicitHeight + (Theme.spaceXl * 2)
+
+        ColumnLayout {
+            id: galleryMainCol
+            width: Math.min(parent.width - (Theme.spaceXxl * 2), 1140)
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.topMargin: Theme.spaceLg
+            spacing: Theme.spaceXl
 
         Item { height: Theme.spaceXs; Layout.fillWidth: true }
 
@@ -242,7 +253,7 @@ ScrollView {
         // Split Layout: Cards Grid / List (Left) and Blueprint Detail (Right)
         GridLayout {
             Layout.fillWidth: true
-            columns: galleryRoot.width > 900 ? 2 : 1
+            columns: galleryRoot.width > 760 ? 2 : 1
             columnSpacing: Theme.spaceLg
             rowSpacing: Theme.spaceLg
             visible: PresetCtrl.profiles.length > 0
@@ -250,8 +261,9 @@ ScrollView {
 
             // Left Column: Profile Cards List
             ColumnLayout {
-                Layout.preferredWidth: galleryRoot.width > 900 ? 400 : -1
-                Layout.fillWidth: true
+                Layout.preferredWidth: galleryRoot.width > 760 ? 380 : -1
+                Layout.maximumWidth: galleryRoot.width > 760 ? 440 : -1
+                Layout.fillWidth: galleryRoot.width <= 760
                 Layout.alignment: Qt.AlignTop
                 spacing: Theme.spaceMd
 
@@ -417,6 +429,7 @@ ScrollView {
             // Right Column: Detailed Profile Blueprint & Workbench Transfer
             PFCard {
                 Layout.fillWidth: true
+                Layout.minimumWidth: galleryRoot.width > 760 ? 340 : -1
                 Layout.alignment: Qt.AlignTop
                 implicitHeight: rightColContent.implicitHeight + (Theme.spaceXl * 2)
 
@@ -879,6 +892,8 @@ ScrollView {
         }
 
         Item { height: Theme.spaceXl; Layout.fillWidth: true }
+        }
+    }
     }
 
     // ==========================================
@@ -889,7 +904,7 @@ ScrollView {
         anchors.fill: parent
         visible: galleryRoot.showImportModal
         color: Qt.rgba(0, 0, 0, 0.70)
-        z: 99
+        z: 999
 
         MouseArea {
             anchors.fill: parent

@@ -5,10 +5,8 @@ import PlasmaForge.Controllers 1.0
 import plasmaforge.qml.theme 1.0
 import plasmaforge.qml.components 1.0
 
-ScrollView {
+Item {
     id: backupRoot
-    contentWidth: availableWidth
-    clip: true
 
     Connections {
         target: BackupCtrl
@@ -17,12 +15,23 @@ ScrollView {
         }
     }
 
-    ColumnLayout {
-        width: Math.min(backupRoot.width - (Theme.spaceXxl * 2), 1140)
-        anchors.horizontalCenter: parent.horizontalCenter
-        spacing: Theme.spaceXl
+    ScrollView {
+        id: backupScrollView
+        anchors.fill: parent
+        contentWidth: availableWidth
+        clip: true
 
-        Item { height: Theme.spaceXs; Layout.fillWidth: true }
+        Item {
+            width: backupScrollView.availableWidth
+            implicitHeight: backupMainCol.implicitHeight + Theme.spaceXl * 2
+
+            ColumnLayout {
+                id: backupMainCol
+                width: Math.min(parent.width - (Theme.spaceXxl * 2), 1140)
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Theme.spaceXl
+
+                Item { height: Theme.spaceXs; Layout.fillWidth: true }
 
         PFSectionHeader {
             title: "Backups & Restore"
@@ -121,16 +130,16 @@ ScrollView {
         // Responsive Two-column Layout: Snapshots on left, Detail/Diff on right
         GridLayout {
             Layout.fillWidth: true
-            columns: backupRoot.width > 900 ? 2 : 1
+            columns: backupRoot.width > 760 ? 2 : 1
             columnSpacing: Theme.spaceLg
             rowSpacing: Theme.spaceLg
 
             // Left: Snapshots List Card
             PFCard {
                 Layout.fillWidth: true
-                Layout.preferredWidth: backupRoot.width > 900 ? 380 : -1
-                Layout.maximumWidth: backupRoot.width > 900 ? 460 : -1
-                Layout.minimumWidth: 0
+                Layout.preferredWidth: backupRoot.width > 760 ? 380 : -1
+                Layout.maximumWidth: backupRoot.width > 760 ? 440 : -1
+                Layout.minimumWidth: backupRoot.width > 760 ? 320 : 0
                 implicitHeight: 520
 
                 ColumnLayout {
@@ -367,8 +376,8 @@ ScrollView {
             // Right: Selected Snapshot Detail & Dry-Run Diff Card
             PFCard {
                 Layout.fillWidth: true
-                Layout.preferredWidth: backupRoot.width > 900 ? 580 : -1
-                Layout.minimumWidth: 0
+                Layout.preferredWidth: backupRoot.width > 760 ? 440 : -1
+                Layout.minimumWidth: backupRoot.width > 760 ? 340 : 0
                 implicitHeight: 520
 
                 ColumnLayout {
@@ -529,6 +538,8 @@ ScrollView {
         }
 
         Item { height: Theme.spaceXxxl; Layout.fillWidth: true }
+            }
+        }
     }
 
     // ==========================================

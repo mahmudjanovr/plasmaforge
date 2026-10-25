@@ -5,11 +5,12 @@ import plasmaforge.qml.theme 1.0
 T.Button {
     id: control
 
-    property string variant: "secondary" // "primary", "secondary", "outline", "subtle", "danger"
+    property string variant: "secondary" // "primary", "secondary", "outline", "subtle", "ghost", "danger"
     property string size: "md" // "sm", "md", "lg"
     property string iconText: ""
 
-    implicitWidth: Math.max(contentRow.implicitWidth + (size === "sm" ? 16 : size === "lg" ? 28 : 22), 64)
+    readonly property bool _isIconOnly: control.text.length <= 2 && control.iconText === ""
+    implicitWidth: _isIconOnly ? implicitHeight : Math.max(contentRow.implicitWidth + (size === "sm" ? 16 : size === "lg" ? 28 : 22), 48)
     implicitHeight: size === "sm" ? 28 : size === "lg" ? 40 : 34
 
     HoverHandler {
@@ -26,15 +27,18 @@ T.Button {
             text: control.iconText
             font.pixelSize: control.size === "sm" ? Theme.fontSizeSm : Theme.fontSizeBase
             color: control._textColor
+            verticalAlignment: Text.AlignVCenter
             anchors.verticalCenter: parent.verticalCenter
         }
 
         Text {
+            visible: control.text !== ""
             text: control.text
             font.family: Theme.fontFamily
             font.pixelSize: control.size === "sm" ? Theme.fontSizeSm : (control.size === "lg" ? Theme.fontSizeMd : Theme.fontSizeBase)
             font.weight: control.variant === "primary" ? Font.DemiBold : Font.Normal
             color: control._textColor
+            verticalAlignment: Text.AlignVCenter
             anchors.verticalCenter: parent.verticalCenter
         }
     }
@@ -49,7 +53,7 @@ T.Button {
     background: Rectangle {
         implicitWidth: control.implicitWidth
         implicitHeight: control.implicitHeight
-        radius: Theme.radiusMd
+        radius: control._isIconOnly ? Theme.radiusSm : Theme.radiusMd
 
         color: {
             if (!control.enabled) return Theme.surfaceElevated
@@ -58,7 +62,7 @@ T.Button {
                 if (control.hovered) return Theme.accentHover
                 return Theme.accent
             }
-            if (control.variant === "outline" || control.variant === "subtle") {
+            if (control.variant === "outline" || control.variant === "subtle" || control.variant === "ghost") {
                 if (control.down) return Qt.rgba(1, 1, 1, 0.08)
                 if (control.hovered) return Qt.rgba(1, 1, 1, 0.05)
                 return "transparent"
@@ -78,7 +82,7 @@ T.Button {
             if (!control.enabled) return Theme.borderSubtle
             if (control.variant === "primary") return "transparent"
             if (control.variant === "outline") return control.hovered ? Theme.accent : Theme.border
-            if (control.variant === "subtle") return "transparent"
+            if (control.variant === "subtle" || control.variant === "ghost") return "transparent"
             if (control.variant === "danger") return control.hovered ? Theme.danger : Theme.dangerMuted
             return control.hovered ? Theme.borderActive : Theme.border
         }

@@ -5,10 +5,8 @@ import PlasmaForge.Controllers 1.0
 import plasmaforge.qml.theme 1.0
 import plasmaforge.qml.components 1.0
 
-ScrollView {
+Item {
     id: desktopBuilderRoot
-    contentWidth: availableWidth
-    clip: true
 
     Connections {
         target: DesktopCtrl
@@ -21,12 +19,23 @@ ScrollView {
         }
     }
 
-    ColumnLayout {
-        width: Math.min(desktopBuilderRoot.width - (Theme.spaceXxl * 2), 1140)
-        anchors.horizontalCenter: parent.horizontalCenter
-        spacing: Theme.spaceXl
+    ScrollView {
+        id: desktopScrollView
+        anchors.fill: parent
+        contentWidth: availableWidth
+        clip: true
 
-        Item { height: Theme.spaceXs; Layout.fillWidth: true }
+        Item {
+            width: desktopScrollView.availableWidth
+            implicitHeight: desktopMainCol.implicitHeight + Theme.spaceXl * 2
+
+            ColumnLayout {
+                id: desktopMainCol
+                width: Math.min(parent.width - (Theme.spaceXxl * 2), 1140)
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Theme.spaceXl
+
+                Item { height: Theme.spaceXs; Layout.fillWidth: true }
 
         PFSectionHeader {
             title: "Desktop Builder"
@@ -78,7 +87,7 @@ ScrollView {
         }
 
         // Layout Status Strip
-        RowLayout {
+        Flow {
             Layout.fillWidth: true
             spacing: Theme.spaceMd
 
@@ -100,10 +109,8 @@ ScrollView {
                 size: "sm"
             }
 
-            Item { Layout.fillWidth: true }
-
             Text {
-                text: "Live applicable: panel & dock positions, thickness, visibility"
+                text: "• Live applicable: panel & dock positions, thickness, visibility"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeXs
                 color: Theme.textMuted
@@ -120,7 +127,7 @@ ScrollView {
                 anchors.margins: Theme.spaceLg
                 spacing: Theme.spaceMd
 
-                RowLayout {
+                Flow {
                     Layout.fillWidth: true
                     spacing: Theme.spaceSm
 
@@ -132,7 +139,7 @@ ScrollView {
                         color: Theme.textMuted
                     }
 
-                    Item { Layout.fillWidth: true }
+                    Item { width: Theme.spaceSm; height: 1 }
 
                     PFBadge {
                         text: "Output: Wayland (1920×1080)"
@@ -460,7 +467,7 @@ ScrollView {
 
             GridLayout {
                 Layout.fillWidth: true
-                columns: desktopBuilderRoot.width > 860 ? 3 : (desktopBuilderRoot.width > 560 ? 2 : 1)
+                columns: desktopBuilderRoot.width > 740 ? 3 : (desktopBuilderRoot.width > 560 ? 2 : 1)
                 columnSpacing: Theme.spaceMd
                 rowSpacing: Theme.spaceMd
 
@@ -523,7 +530,7 @@ ScrollView {
         // Workbench Controls: 2-Column Responsive Layout
         GridLayout {
             Layout.fillWidth: true
-            columns: desktopBuilderRoot.width > 860 ? 2 : 1
+            columns: desktopBuilderRoot.width > 740 ? 2 : 1
             columnSpacing: Theme.spaceLg
             rowSpacing: Theme.spaceLg
 
@@ -802,6 +809,8 @@ ScrollView {
         }
 
         Item { height: Theme.spaceXl; Layout.fillWidth: true }
+            }
+        }
     }
 
     // Slide-out Drawer for Diff Preview
@@ -813,7 +822,7 @@ ScrollView {
         dim: true
 
         background: Rectangle {
-            color: Theme.background
+            color: Theme.bg
             border.color: Theme.border
             border.width: 1
         }
