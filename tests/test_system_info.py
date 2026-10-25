@@ -40,5 +40,6 @@ def test_get_system_info() -> None:
     assert info.safe_mode_active is True
     assert isinstance(info.tools_available, dict)
     assert "plasmashell" in info.tools_available
+    assert "plasma-apply-colorscheme" in info.tools_available
     assert info.qt_version != ""
     assert isinstance(info.to_dict(), dict)

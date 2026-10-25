@@ -10,6 +10,17 @@ ScrollView {
     contentWidth: availableWidth
     clip: true
 
+    Connections {
+        target: DesktopCtrl
+        function onApplyFinished(success, message, isDryRun) {
+            var level = success ? (isDryRun ? "info" : "success") : "error"
+            AppCtrl.showToast(message, level)
+        }
+        function onRestoreFinished(success, message) {
+            AppCtrl.showToast(message, success ? "success" : "error")
+        }
+    }
+
     ColumnLayout {
         width: Math.min(desktopBuilderRoot.width - (Theme.spaceXxl * 2), 1140)
         anchors.horizontalCenter: parent.horizontalCenter
@@ -685,6 +696,7 @@ ScrollView {
                         RowLayout {
                             Layout.fillWidth: true
                             Text { text: "Icon Size"; font.pixelSize: Theme.fontSizeXs; color: Theme.textMuted }
+                            PFBadge { text: "Preview Only"; variant: "neutral"; size: "xs" }
                             Item { Layout.fillWidth: true }
                             Text { text: DesktopCtrl.dockIconSize + " px"; font.family: Theme.fontMono; font.pixelSize: Theme.fontSizeXs; color: Theme.textPrimary }
                         }
@@ -969,7 +981,7 @@ ScrollView {
                         Text {
                             text: AppCtrl.safeMode
                                 ? "Safe Mode is active. A simulated dry-run will create a test snapshot and generate unified diffs without modifying your live configuration."
-                                : "A verified cryptographic snapshot will be created before modifying any files. Supported panel position, thickness, and visibility keys will be applied. plasmashell will NOT be terminated."
+                                : "A verified cryptographic snapshot will be created before modifying any files. Supported panel position, thickness, and visibility keys will be applied. Visual changes take effect on desktop refresh or next login (plasmashell will NOT be terminated)."
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeXs
                             color: Theme.textSecondary

@@ -144,14 +144,28 @@ class ThemeInspector:
     """Safe, read-only scanner for installed KDE color schemes and Plasma styles."""
 
     def __init__(self) -> None:
-        self.scheme_dirs = [
-            Path.home() / ".local" / "share" / "color-schemes",
-            Path("/usr/share/color-schemes"),
-        ]
-        self.plasma_dirs = [
-            Path.home() / ".local" / "share" / "plasma" / "desktoptheme",
-            Path("/usr/share/plasma/desktoptheme"),
-        ]
+        xdg_data_home = Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share"))
+        xdg_data_dirs_raw = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
+        xdg_data_dirs = [Path(p) for p in xdg_data_dirs_raw.split(":") if p.strip()]
+
+        s_dirs: List[Path] = [xdg_data_home / "color-schemes"]
+        p_dirs: List[Path] = [xdg_data_home / "plasma" / "desktoptheme"]
+
+        for d in xdg_data_dirs:
+            sd = d / "color-schemes"
+            if sd not in s_dirs:
+                s_dirs.append(sd)
+            pd = d / "plasma" / "desktoptheme"
+            if pd not in p_dirs:
+                p_dirs.append(pd)
+
+        if Path("/usr/share/color-schemes") not in s_dirs:
+            s_dirs.append(Path("/usr/share/color-schemes"))
+        if Path("/usr/share/plasma/desktoptheme") not in p_dirs:
+            p_dirs.append(Path("/usr/share/plasma/desktoptheme"))
+
+        self.scheme_dirs = s_dirs
+        self.plasma_dirs = p_dirs
 
     def get_active_scheme_id(self) -> str:
         """Return the ID of the currently active KDE color scheme."""

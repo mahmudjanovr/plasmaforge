@@ -141,6 +141,7 @@ def get_system_info(kdeglobals_path: Optional[Path] = None) -> SystemInfo:
 
     tools = {
         "plasmashell": bool(shutil.which("plasmashell")),
+        "plasma-apply-colorscheme": bool(shutil.which("plasma-apply-colorscheme")),
         "kwriteconfig6": bool(shutil.which("kwriteconfig6")),
         "kreadconfig6": bool(shutil.which("kreadconfig6")),
         "qdbus6": bool(shutil.which("qdbus6")),

@@ -60,10 +60,21 @@ class KdeColorSchemeApplier:
         self.safe_mode = safe_mode
         self.source_config_dir = source_config_dir or (Path.home() / ".config")
         self.tool_binary = tool_binary or shutil.which("plasma-apply-colorscheme")
-        self.scheme_dirs = [
-            Path.home() / ".local" / "share" / "color-schemes",
-            Path("/usr/share/color-schemes"),
-        ]
+        import os
+
+        xdg_data_home = Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share"))
+        xdg_data_dirs_raw = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
+        xdg_data_dirs = [Path(p) for p in xdg_data_dirs_raw.split(":") if p.strip()]
+
+        dirs: List[Path] = [xdg_data_home / "color-schemes"]
+        for d in xdg_data_dirs:
+            sd = d / "color-schemes"
+            if sd not in dirs:
+                dirs.append(sd)
+        fallback_usr = Path("/usr/share/color-schemes")
+        if fallback_usr not in dirs:
+            dirs.append(fallback_usr)
+        self.scheme_dirs = dirs
         self.safety_engine = TransactionalSafetyEngine(
             backup_manager=self.backup_manager,
             safe_mode=self.safe_mode,
@@ -254,6 +265,21 @@ class KdeColorSchemeApplier:
                 diff_preview=diff_text,
             )
 
+        # Collect allowed names for post-apply verification
+        allowed_matches = {scheme_id.strip().lower()}
+        if file_path:
+            allowed_matches.add(file_path.stem.strip().lower())
+            try:
+                scfg = configparser.ConfigParser(interpolation=None)
+                scfg.optionxform = str
+                scfg.read(file_path, encoding="utf-8")
+                if scfg.has_section("General"):
+                    name_val = scfg.get("General", "Name", fallback="").strip()
+                    if name_val:
+                        allowed_matches.add(name_val.lower())
+            except Exception:
+                pass
+
         # 4. Construct ApplyOperation for TransactionalSafetyEngine
         def apply_step() -> tuple[bool, str]:
             try:
@@ -270,7 +296,7 @@ class KdeColorSchemeApplier:
             return True, "Executed"
 
         def verify_step() -> tuple[bool, str]:
-            # Post-apply verification: ensure kdeglobals exists and has valid configuration
+            # Post-apply verification: ensure kdeglobals exists and General.ColorScheme matches
             kdeglobals = self.source_config_dir / "kdeglobals"
             if not kdeglobals.is_file():
                 return False, "Configuration file kdeglobals missing after apply."
@@ -279,12 +305,14 @@ class KdeColorSchemeApplier:
                 cfg.optionxform = str
                 cfg.read(kdeglobals, encoding="utf-8")
                 if cfg.has_option("General", "ColorScheme"):
-                    val = cfg.get("General", "ColorScheme")
-                    if val.lower() == scheme_id.lower():
-                        return True, "Verified"
-                if cfg.sections():
-                    return True, "Verified"
-                return False, "kdeglobals contains no valid sections after apply."
+                    val = cfg.get("General", "ColorScheme", fallback="").strip()
+                    if val.lower() in allowed_matches:
+                        return True, f"Verified: kdeglobals ColorScheme is '{val}'"
+                    return (
+                        False,
+                        f"Verification failed: kdeglobals ColorScheme is '{val}', expected '{scheme_id}'."
+                    )
+                return False, "Verification failed: General.ColorScheme option missing in kdeglobals."
             except Exception as e:
                 return False, f"Verification failed to parse kdeglobals: {e}"
 

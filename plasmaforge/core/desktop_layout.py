@@ -5,6 +5,8 @@ from __future__ import annotations
 import configparser
 import difflib
 import io
+import shutil
+import subprocess
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -282,6 +284,10 @@ def detect_desktop_layout(config_path: Optional[Path] = None) -> DesktopLayout:
                 thickness = 36
                 if parser.has_option(sec, "thickness"):
                     thickness = parser.getint(sec, "thickness", fallback=36)
+                elif parser.has_section(f"Containments][{cid}][ConfigDialog"):
+                    h = parser.getint(f"Containments][{cid}][ConfigDialog", "DialogHeight", fallback=36)
+                    if 20 <= h <= 128:
+                        thickness = h
                 elif parser.has_section(f"Containments][{cid}][ConfigDialog]"):
                     h = parser.getint(f"Containments][{cid}][ConfigDialog]", "DialogHeight", fallback=36)
                     if 20 <= h <= 128:
@@ -419,7 +425,7 @@ class DesktopLayoutApplier:
                 f"# Unified Diff Preview: Desktop Layout '{target_layout.name}'",
                 f"# Target: {config_file}",
                 f"# Supported live properties: panel position, thickness, visibility",
-                f"# Note: Widget placement and floating dock padding are preview-only simulations.",
+                f"# Note: Widget placement, dock icon size, and floating dock padding are preview-only simulations.",
                 "--------------------------------------------------\n",
             ]
 
@@ -485,9 +491,22 @@ class DesktopLayoutApplier:
 
                 config_file.parent.mkdir(parents=True, exist_ok=True)
                 with open(config_file, "w", encoding="utf-8") as f:
-                    parser.write(f)
+                    parser.write(f, space_around_delimiters=False)
 
-                return True, "Applied layout settings successfully."
+                if shutil.which("kwriteconfig6"):
+                    try:
+                        subprocess.run(
+                            ["kwriteconfig6", "--file", "plasma-org.kde.plasma.desktop-appletsrc", "--notify", ""],
+                            capture_output=True,
+                            timeout=2.0,
+                        )
+                    except Exception:
+                        pass
+
+                return (
+                    True,
+                    "Layout settings saved to plasma-org.kde.plasma.desktop-appletsrc. Visual changes will apply on desktop refresh or next login (plasmashell kept running safely).",
+                )
             except Exception as e:
                 return False, f"Failed to write layout configuration: {e}"
 

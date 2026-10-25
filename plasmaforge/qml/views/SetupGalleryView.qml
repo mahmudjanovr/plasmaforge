@@ -10,6 +10,13 @@ ScrollView {
     contentWidth: availableWidth
     clip: true
 
+    Connections {
+        target: PresetCtrl
+        function onProfileOperationCompleted(message, success) {
+            AppCtrl.showToast(message, success ? "success" : "error")
+        }
+    }
+
     property bool showImportModal: false
     property int importTab: 0 // 0: File Path, 1: JSON Text
 

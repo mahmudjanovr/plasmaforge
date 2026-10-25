@@ -8,6 +8,17 @@ import plasmaforge.qml.components 1.0
 Item {
     id: themeStudioRoot
 
+    Connections {
+        target: ThemeCtrl
+        function onApplyFinished(success, message, isDryRun) {
+            var level = success ? (isDryRun ? "info" : "success") : "error"
+            AppCtrl.showToast(message, level)
+        }
+        function onRestoreFinished(success, message) {
+            AppCtrl.showToast(message, success ? "success" : "error")
+        }
+    }
+
     ScrollView {
         id: scrollView
         anchors.fill: parent

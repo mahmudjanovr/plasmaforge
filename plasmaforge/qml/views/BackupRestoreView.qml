@@ -10,6 +10,13 @@ ScrollView {
     contentWidth: availableWidth
     clip: true
 
+    Connections {
+        target: BackupCtrl
+        function onSnapshotOperationCompleted(message, success) {
+            AppCtrl.showToast(message, success ? "success" : "error")
+        }
+    }
+
     ColumnLayout {
         width: Math.min(backupRoot.width - (Theme.spaceXxl * 2), 1140)
         anchors.horizontalCenter: parent.horizontalCenter

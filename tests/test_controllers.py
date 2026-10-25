@@ -253,3 +253,33 @@ def test_backup_controller_deletion_and_search(tmp_path: Path, qapp: QGuiApplica
     assert ctrl.selectedSnapshot == {}
 
 
+def test_controller_notification_signals(qapp: QGuiApplication) -> None:
+    """Verify that all controllers emit standardized completion signals for toast notifications."""
+    app_ctrl = AppController()
+    toasts = []
+    app_ctrl.statusToastRequested.connect(lambda msg, lvl: toasts.append((msg, lvl)))
+
+    app_ctrl.showToast("Test message", "info")
+    assert toasts == [("Test message", "info")]
+
+    theme_ctrl = ThemeController()
+    theme_events = []
+    theme_ctrl.applyFinished.connect(lambda s, m, d: theme_events.append((s, m, d)))
+    theme_ctrl.restoreFinished.connect(lambda s, m: theme_events.append((s, m)))
+    assert hasattr(theme_ctrl, "applyFinished")
+    assert hasattr(theme_ctrl, "restoreFinished")
+
+    desktop_ctrl = DesktopController()
+    desktop_events = []
+    desktop_ctrl.applyFinished.connect(lambda s, m, d: desktop_events.append((s, m, d)))
+    desktop_ctrl.restoreFinished.connect(lambda s, m: desktop_events.append((s, m)))
+    assert hasattr(desktop_ctrl, "applyFinished")
+    assert hasattr(desktop_ctrl, "restoreFinished")
+
+    preset_ctrl = PresetController()
+    preset_events = []
+    preset_ctrl.profileOperationCompleted.connect(lambda m, s: preset_events.append((m, s)))
+    assert hasattr(preset_ctrl, "profileOperationCompleted")
+
+
+

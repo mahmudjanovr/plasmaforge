@@ -106,9 +106,15 @@ def test_live_mode_success_with_backup(mock_env):
     applier = mock_env["applier"]
     applier.safe_mode = False
 
-    with patch.object(applier, "_execute_apply_command") as mock_exec:
-        mock_exec.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    def fake_exec(tool, scheme_id):
+        # Simulate real plasma-apply-colorscheme updating kdeglobals
+        mock_env["kdeglobals"].write_text(
+            f"[General]\nColorScheme={scheme_id}\n\n[Colors:Window]\nBackgroundNormal=46,52,64\n",
+            encoding="utf-8",
+        )
+        return MagicMock(returncode=0, stdout="", stderr="")
 
+    with patch.object(applier, "_execute_apply_command", side_effect=fake_exec) as mock_exec:
         result = applier.apply_scheme("TestNordic")
 
         # Subprocess must be called with exact argument vector, NO shell
@@ -127,6 +133,42 @@ def test_live_mode_success_with_backup(mock_env):
         )
         assert valid is True
         assert len(errors) == 0
+
+
+def test_live_mode_verification_failure_triggers_automatic_rollback(mock_env):
+    applier = mock_env["applier"]
+    applier.safe_mode = False
+    kdeglobals = mock_env["kdeglobals"]
+    original_text = kdeglobals.read_text(encoding="utf-8")
+
+    # Simulate tool returning 0 without actually updating General.ColorScheme
+    def fake_exec_noop(tool, scheme_id):
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    with patch.object(applier, "_execute_apply_command", side_effect=fake_exec_noop):
+        result = applier.apply_scheme("TestNordic")
+
+        assert result.success is False
+        assert "Verification failed" in result.message
+        assert result.rolled_back is True
+        assert result.backup_id != ""
+
+        # Verify kdeglobals was restored to original content
+        assert kdeglobals.read_text(encoding="utf-8") == original_text
+
+
+def test_xdg_data_dirs_discovery(tmp_path: Path, monkeypatch):
+    custom_xdg = tmp_path / "custom_share"
+    custom_schemes = custom_xdg / "color-schemes"
+    custom_schemes.mkdir(parents=True)
+    (custom_schemes / "CustomXdg.colors").write_text("[General]\nName=Custom XDG\n", encoding="utf-8")
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(custom_xdg))
+    applier = KdeColorSchemeApplier(source_config_dir=tmp_path)
+
+    found = applier.find_scheme_file("CustomXdg")
+    assert found is not None
+    assert found.name == "CustomXdg.colors"
 
 
 def test_live_mode_failure_triggers_automatic_rollback(mock_env):
