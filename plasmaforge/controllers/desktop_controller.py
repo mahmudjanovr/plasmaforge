@@ -219,6 +219,21 @@ class DesktopController(QObject):
                 self.draftChanged.emit()
                 break
 
+    @Slot("QVariantMap")
+    def loadDraftFromDict(self, layout_dict: Dict[str, Any]) -> None:
+        """Load a desktop layout dictionary into the editable draft workbench."""
+        top_cid = self._detected_layout.top_panel.containment_id
+        dock_cid = self._detected_layout.dock.containment_id
+
+        self._draft_layout = DesktopLayout.from_dict(layout_dict)
+        if top_cid and not self._draft_layout.top_panel.containment_id:
+            self._draft_layout.top_panel.containment_id = top_cid
+        if dock_cid and not self._draft_layout.dock.containment_id:
+            self._draft_layout.dock.containment_id = dock_cid
+
+        self._selected_preset_id = self._draft_layout.id
+        self.draftChanged.emit()
+
     @Slot()
     def resetDraft(self) -> None:
         """Reset draft back to the current detected layout."""

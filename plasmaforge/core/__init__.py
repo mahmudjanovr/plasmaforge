@@ -26,6 +26,12 @@ from plasmaforge.core.desktop_layout import (
     detect_desktop_layout,
     get_layout_presets,
 )
+from plasmaforge.core.profiles import (
+    ColorSchemeSpec,
+    ProfileManager,
+    SetupProfile,
+    get_curated_profiles,
+)
 
 __all__ = [
     "AppConfig",
@@ -52,4 +58,9 @@ __all__ = [
     "PanelConfig",
     "detect_desktop_layout",
     "get_layout_presets",
+    "ColorSchemeSpec",
+    "ProfileManager",
+    "SetupProfile",
+    "get_curated_profiles",
 ]
+

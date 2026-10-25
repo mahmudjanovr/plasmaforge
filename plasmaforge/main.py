@@ -95,6 +95,26 @@ def create_application(argv: list[str] | None = None) -> tuple[QGuiApplication, 
             app_ctrl.showToast(msg, "success" if ok else "error"),
         )
     )
+    preset_ctrl.layoutTransferRequested.connect(
+        lambda layout: (
+            desktop_ctrl.loadDraftFromDict(layout),
+            app_ctrl.navigateTo("Desktop Builder"),
+            app_ctrl.showToast("Loaded layout into Desktop Builder draft.", "info"),
+        )
+    )
+    preset_ctrl.themeTransferRequested.connect(
+        lambda scheme_id: (
+            theme_ctrl.selectSchemeById(scheme_id),
+            app_ctrl.navigateTo("Theme Studio"),
+            app_ctrl.showToast("Selected color scheme in Theme Studio.", "info"),
+        )
+    )
+    preset_ctrl.profileOperationCompleted.connect(
+        lambda msg, ok: (
+            app_ctrl.showToast(msg, "success" if ok else "error")
+        )
+    )
+
 
     engine = QQmlApplicationEngine()
 

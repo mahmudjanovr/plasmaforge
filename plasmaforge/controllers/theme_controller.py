@@ -143,6 +143,15 @@ class ThemeController(QObject):
             self._selected_scheme_index = index
             self.selectedSchemeChanged.emit()
 
+    @Slot(str, result=bool)
+    def selectSchemeById(self, scheme_id: str) -> bool:
+        """Find scheme by ID and select it."""
+        for idx, s in enumerate(self._schemes):
+            if s.get("id", "").lower() == scheme_id.lower() or s.get("name", "").lower() == scheme_id.lower():
+                self.selectScheme(idx)
+                return True
+        return False
+
     @Slot(int)
     def requestDiffPreview(self, index: int) -> None:
         """Generate unified diff showing changes between active configuration and target scheme."""

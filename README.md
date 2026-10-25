@@ -26,13 +26,14 @@ plasmaforge/
 │   │   ├── transaction.py          # Reusable transactional safety layer, states & rollback engine
 │   │   ├── color_scheme_applier.py # KDE color scheme applier backed by TransactionalSafetyEngine
 │   │   ├── desktop_layout.py       # Desktop layout model, detection, presets & layout applier
+│   │   ├── profiles.py             # Versioned profile schema (v1), ProfileManager, JSON import/export
 │   │   └── presets.py              # Curated native desktop recipe catalog
 │   ├── controllers/                # QML presentation singletons (PlasmaForge.Controllers 1.0)
 │   │   ├── app_controller.py       # Active view navigation, safe mode, and status toasts
 │   │   ├── system_controller.py    # Exposes system metrics & KDE tools to QML
 │   │   ├── theme_controller.py     # Scheme selection, diff preview, confirmation & apply workflows
 │   │   ├── desktop_controller.py   # Desktop Builder draft workbench, presets, diffs & safe apply
-│   │   ├── preset_controller.py    # Gallery preset inspector & dry-run diffs
+│   │   ├── preset_controller.py    # Setup Gallery profile manager, filters, search & transfers
 │   │   ├── backup_controller.py    # Snapshot creation, listing, integrity verification & safe restore
 │   │   └── settings_controller.py  # Preferences & dynamic safe mode toggle
 │   └── qml/                        # Qt Quick presentation layer
@@ -53,11 +54,12 @@ plasmaforge/
 │           ├── OverviewView.qml
 │           ├── ThemeStudioView.qml # Live color scheme inspector, diff drawer & apply confirmation
 │           ├── DesktopBuilderView.qml# Interactive desktop layout blueprint & workbench
-│           ├── SetupGalleryView.qml
+│           ├── SetupGalleryView.qml# Browsable profiles, category filter, blueprint & import/export
 │           ├── BackupRestoreView.qml# Snapshot manager & transactional restore modal
 │           ├── SettingsView.qml    # Dynamic Safe Mode / Live Mode configuration
 │           └── qmldir
-└── tests/                          # Automated pytest suite (51 tests)
+└── tests/                          # Automated pytest suite (61 tests)
+    ├── conftest.py                 # Shared session-wide offscreen qapp fixture
     ├── test_config.py
     ├── test_system_info.py
     ├── test_adapter_boundary.py
@@ -66,8 +68,10 @@ plasmaforge/
     ├── test_color_scheme_applier.py
     ├── test_transaction_safety.py  # 12 focused transactional apply & rollback tests
     ├── test_desktop_builder.py     # 8 focused Desktop Builder models, presets & apply tests
+    ├── test_profiles.py            # 10 focused Setup Gallery profile validation & workflow tests
     ├── test_controllers.py         # App, theme, settings, preset, and desktop controller workflows
     └── test_qml_loading.py
+
 ```
 
 ---
@@ -121,9 +125,15 @@ PlasmaForge enforces a reusable, transactional safety boundary across all custom
    - **Safe Apply & Rollback**: Uses `TransactionalSafetyEngine` with pre-apply backup, explicit confirmation, diff preview, verification, and one-click restore. `plasmashell` is never killed.
 
 4. **Setup Gallery**:
-   - Curated native desktop presets: *Obsidian Teal Studio*, *Nordic Horizon*, *Arch Minimalist*, and *Paper & Umber Dark*.
-   - Component breakdowns, palette swatches, and tagging.
-   - Changeset Dry-Run Inspector: generates exact unified diffs of proposed configuration adjustments via the `DryRunAdapter`.
+   - **Versioned Profile Schema (v1)**: Typed JSON profiles combining supported KDE color schemes, desktop layout specifications, and contextual metadata.
+   - **Curated Setup Collection**: Ready-to-use profiles including *Obsidian Teal Studio*, *Nordic Horizon*, *Nothing-Inspired Studio*, *Arch Minimalist*, and *Solarized Productivity*.
+   - **Category & Search Filtering**: Filter by categories (`All`, `Productivity`, `Minimal`, `Nothing-Inspired`, `Imported`) with live keyword search.
+   - **Blueprint Inspection & Workbench Transfers**:
+     - *Stage in Theme Studio*: Selects and stages the profile's color scheme in Theme Studio without direct mutation.
+     - *Load into Desktop Builder*: Injects the profile's panel and dock layout directly into the editable draft workbench.
+   - **Honest Simulation Transparency**: Unambiguous badges and disclaimers separating live-applicable KDE properties from preview-only visual references (wallpapers, typography, widget telemetry).
+   - **JSON Import & Export**: Export profiles to `~/<id>_profile.json` and import from files or raw JSON into `~/.local/share/plasmaforge/profiles/`.
+   - **Security Guarantees**: Strict 512 KB file size ceiling, rejection of executable keys (`exec`, `command`, `shell`, etc.), and automatic sequential duplicate ID handling.
 
 5. **Backups & Restore**:
    - Versioned snapshot creation of critical KDE Plasma configuration files with unique monotonic identifiers.
@@ -195,7 +205,7 @@ The test suite validates:
 - Reusable TransactionalSafetyEngine: happy path, apply failure rollback, verification failure rollback, backup corruption abort, rollback failure handling, safe mode protection, unconfirmed live mode protection, and unsafe target rejection (12 focused tests)
 - Safe manual snapshot restoration with pre-restore safety snapshot and post-restore SHA256 verification
 - Controller state transitions, theme application workflow, and backup restore modal transitions
-- Headless QML engine loading and view switching (42 tests passing)
+- Headless QML engine loading, view switching, and Setup Gallery schema and workflows (61 tests passing)
 
 ---
 
