@@ -7,6 +7,7 @@ from plasmaforge.controllers.preset_controller import PresetController
 from plasmaforge.controllers.backup_controller import BackupController
 from plasmaforge.controllers.settings_controller import SettingsController
 from plasmaforge.controllers.desktop_controller import DesktopController
+from plasmaforge.controllers.store_controller import StoreController
 
 __all__ = [
     "AppController",
@@ -16,4 +17,5 @@ __all__ = [
     "BackupController",
     "SettingsController",
     "DesktopController",
+    "StoreController",
 ]

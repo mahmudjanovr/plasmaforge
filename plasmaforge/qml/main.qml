@@ -22,6 +22,7 @@ ApplicationWindow {
         { name: "Theme Studio", icon: "🎨", desc: "Color schemes, plasma styles & palettes" },
         { name: "Desktop Builder", icon: "📐", desc: "Panel geometry & widget workspace" },
         { name: "Setup Gallery", icon: "✨", desc: "Curated desktop presets & recipes" },
+        { name: "Global Themes", icon: "🌐", desc: "KDE Store catalog & safe installation" },
         { name: "Backups & Restore", icon: "🛡", desc: "Safe configuration snapshots & diffs" },
         { name: "Settings", icon: "⚙", desc: "Runtime preferences & diagnostics" }
     ]
@@ -310,8 +311,9 @@ ApplicationWindow {
                         if (AppCtrl.activeSection === "Theme Studio") return 1
                         if (AppCtrl.activeSection === "Desktop Builder") return 2
                         if (AppCtrl.activeSection === "Setup Gallery") return 3
-                        if (AppCtrl.activeSection === "Backups & Restore") return 4
-                        if (AppCtrl.activeSection === "Settings") return 5
+                        if (AppCtrl.activeSection === "Global Themes") return 4
+                        if (AppCtrl.activeSection === "Backups & Restore") return 5
+                        if (AppCtrl.activeSection === "Settings") return 6
                         return 0
                     }
 
@@ -319,6 +321,7 @@ ApplicationWindow {
                     ThemeStudioView {}
                     DesktopBuilderView {}
                     SetupGalleryView {}
+                    GlobalThemesView {}
                     BackupRestoreView {}
                     SettingsView {}
                 }

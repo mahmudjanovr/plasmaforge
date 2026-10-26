@@ -33,6 +33,7 @@ def test_qml_full_startup(qapp: QGuiApplication) -> None:
         "Theme Studio",
         "Desktop Builder",
         "Setup Gallery",
+        "Global Themes",
         "Backups & Restore",
         "Settings",
     ]
@@ -249,7 +250,9 @@ def test_qml_full_startup(qapp: QGuiApplication) -> None:
         app.processEvents()
 
     # Create user preset and test delete dialog
-    assert theme_ctrl.confirmSavePreset("Qml Test Preset") is True
+    theme_ctrl.requestDeletePreset("qml_test_preset")
+    theme_ctrl.confirmDeletePreset()
+    assert theme_ctrl.confirmSavePreset("Qml Test Preset", overwrite=True) is True
     theme_ctrl.requestDeletePreset("qml_test_preset")
     assert theme_ctrl.showPresetDeleteDialog is True
     for _ in range(4):
@@ -258,9 +261,33 @@ def test_qml_full_startup(qapp: QGuiApplication) -> None:
     assert theme_ctrl.showPresetDeleteDialog is False
     for _ in range(4):
         app.processEvents()
-    # Clean up created preset
     theme_ctrl.requestDeletePreset("qml_test_preset")
     theme_ctrl.confirmDeletePreset()
+    # Global Themes Online Store Verification
+    app_ctrl.navigateTo("Global Themes")
+    store_ctrl = engine._controllers["store"]
+    assert store_ctrl is not None
+    assert isinstance(store_ctrl.installedThemes, list)
+
+    for width, height in [(800, 560), (1024, 768), (1440, 900)]:
+        window.setProperty("width", width)
+        window.setProperty("height", height)
+        for _ in range(4):
+            app.processEvents()
+        assert window.width() == width
+        assert window.height() == height
+
+    # Test apply confirmation modal on Global Themes
+    if store_ctrl.installedThemes:
+        first_installed = store_ctrl.installedThemes[0]["id"]
+        store_ctrl.requestApplyTheme(first_installed)
+        assert store_ctrl.showApplyConfirmDialog is True
+        for _ in range(4):
+            app.processEvents()
+        store_ctrl.cancelApplyTheme()
+        assert store_ctrl.showApplyConfirmDialog is False
+        for _ in range(4):
+            app.processEvents()
 
 
 

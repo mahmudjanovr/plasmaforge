@@ -20,6 +20,7 @@ from plasmaforge.controllers import (
     SystemController,
     ThemeController,
     DesktopController,
+    StoreController,
 )
 
 CONTROLLERS_URI = "PlasmaForge.Controllers"
@@ -50,6 +51,7 @@ def create_application(argv: list[str] | None = None) -> tuple[QGuiApplication, 
     backup_ctrl = BackupController(app)
     settings_ctrl = SettingsController(app)
     desktop_ctrl = DesktopController(app)
+    store_ctrl = StoreController(app)
 
     # Register controllers as first-class QML singletons
     qmlRegisterSingletonInstance(AppController, CONTROLLERS_URI, 1, 0, "AppCtrl", app_ctrl)
@@ -59,6 +61,7 @@ def create_application(argv: list[str] | None = None) -> tuple[QGuiApplication, 
     qmlRegisterSingletonInstance(BackupController, CONTROLLERS_URI, 1, 0, "BackupCtrl", backup_ctrl)
     qmlRegisterSingletonInstance(SettingsController, CONTROLLERS_URI, 1, 0, "SettingsCtrl", settings_ctrl)
     qmlRegisterSingletonInstance(DesktopController, CONTROLLERS_URI, 1, 0, "DesktopCtrl", desktop_ctrl)
+    qmlRegisterSingletonInstance(StoreController, CONTROLLERS_URI, 1, 0, "StoreCtrl", store_ctrl)
 
     # Wire safe mode synchronization & toasts
     app_ctrl.setSafeMode(settings_ctrl.safeMode)
@@ -119,6 +122,19 @@ def create_application(argv: list[str] | None = None) -> tuple[QGuiApplication, 
             app_ctrl.showToast(msg, "success" if ok else "error")
         )
     )
+    store_ctrl.operationCompleted.connect(
+        lambda msg, ok: (
+            app_ctrl.showToast(msg, "success" if ok else "error")
+        )
+    )
+    store_ctrl.applyFinished.connect(
+        lambda ok, msg, dry: (
+            system_ctrl.refresh(),
+            theme_ctrl.refresh(),
+            store_ctrl.refreshInstalledThemes(),
+            app_ctrl.showToast(msg, "info" if dry else ("success" if ok else "error")),
+        )
+    )
 
 
     engine = QQmlApplicationEngine()
@@ -137,6 +153,7 @@ def create_application(argv: list[str] | None = None) -> tuple[QGuiApplication, 
     ctx.setContextProperty("backupCtrl", backup_ctrl)
     ctx.setContextProperty("settingsCtrl", settings_ctrl)
     ctx.setContextProperty("desktopCtrl", desktop_ctrl)
+    ctx.setContextProperty("storeCtrl", store_ctrl)
 
     # Keep references alive
     engine._controllers = {  # type: ignore[attr-defined]
@@ -147,6 +164,7 @@ def create_application(argv: list[str] | None = None) -> tuple[QGuiApplication, 
         "backup": backup_ctrl,
         "settings": settings_ctrl,
         "desktop": desktop_ctrl,
+        "store": store_ctrl,
     }
 
     main_qml_path = qml_dir / "main.qml"

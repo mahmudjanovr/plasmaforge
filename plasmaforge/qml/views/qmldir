@@ -4,3 +4,4 @@ DesktopBuilderView 1.0 DesktopBuilderView.qml
 SetupGalleryView 1.0 SetupGalleryView.qml
 BackupRestoreView 1.0 BackupRestoreView.qml
 SettingsView 1.0 SettingsView.qml
+GlobalThemesView 1.0 GlobalThemesView.qml

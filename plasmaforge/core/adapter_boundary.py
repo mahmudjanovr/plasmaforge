@@ -30,6 +30,7 @@ ALLOWED_CONFIG_FILES = {
     ),
     "kwinrc": Path.home() / ".config" / "kwinrc",
     "kglobalshortcutsrc": Path.home() / ".config" / "kglobalshortcutsrc",
+    "kcminputrc": Path.home() / ".config" / "kcminputrc",
 }
 
 # Identifier validation pattern to prevent injection

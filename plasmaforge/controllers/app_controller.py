@@ -50,6 +50,7 @@ class AppController(QObject):
             "Theme Studio",
             "Desktop Builder",
             "Setup Gallery",
+            "Global Themes",
             "Backups & Restore",
             "Settings",
         }

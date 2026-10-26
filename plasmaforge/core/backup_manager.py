@@ -27,6 +27,7 @@ SAFE_KDE_CONFIG_FILES = [
     "plasma-org.kde.plasma.desktop-appletsrc",
     "kwinrc",
     "kglobalshortcutsrc",
+    "kcminputrc",
 ]
 
 # Strict snapshot ID pattern: letters, numbers, underscores, and dashes only
