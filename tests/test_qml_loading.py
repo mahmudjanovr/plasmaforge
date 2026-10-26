@@ -174,5 +174,95 @@ def test_qml_full_startup(qapp: QGuiApplication) -> None:
     for card in large_cards[:2]:
         assert card.width() >= 350, f"Card width {card.width()} was too narrow (collapsed column defect)"
 
+    # Theme Studio Live Preview & Multi-Resolution Verification (800x560, 1024x768, 1440x900)
+    app_ctrl.navigateTo("Theme Studio")
+    for _ in range(6):
+        app.processEvents()
+
+    for width, height in [(800, 560), (1024, 768), (1440, 900)]:
+        window.setProperty("width", width)
+        window.setProperty("height", height)
+        for _ in range(6):
+            app.processEvents()
+        assert window.width() == width
+        assert window.height() == height
+
+    # Find the live preview canvas Rectangle in QML
+    def find_item_by_match(it, match_func):
+        if match_func(it):
+            return it
+        for ch in it.childItems():
+            r = find_item_by_match(ch, match_func)
+            if r is not None:
+                return r
+        return None
+
+    preview_box = find_item_by_match(
+        window.contentItem(),
+        lambda item: (
+            item.metaObject().className().startswith("QQuickRectangle")
+            and hasattr(item, "property")
+            and isinstance(item.property("color"), QColor)
+            and item.property("color").name().lower() == theme_ctrl.backgroundColor.lower()
+            and item.width() > 200
+            and item.height() > 200
+        ),
+    )
+    assert preview_box is not None, "Theme Studio live preview window canvas should be present"
+
+    # Color update: verify background change propagates immediately to preview
+    theme_ctrl.setBackgroundColor("#0a0c10")
+    for _ in range(6):
+        app.processEvents()
+    assert preview_box.property("color").name().lower() == "#0a0c10"
+
+    # Border radius update: verify radius updates immediately (radiusLg = 12 + 2 = 14)
+    theme_ctrl.setBorderRadius(12)
+    for _ in range(6):
+        app.processEvents()
+    assert preview_box.property("radius") == 14
+
+    # Typography & Spacing scale update
+    theme_ctrl.setFontFamily("Noto Sans")
+    theme_ctrl.setFontSize(16)
+    theme_ctrl.setSpacingScale(1.25)
+    for _ in range(6):
+        app.processEvents()
+    assert theme_ctrl.fontFamily == "Noto Sans"
+    assert theme_ctrl.fontSize == 16
+    assert theme_ctrl.spacingScale == 1.25
+
+    # Test Theme Studio modals at 800x560
+    window.setProperty("width", 800)
+    window.setProperty("height", 560)
+    for _ in range(4):
+        app.processEvents()
+
+    # Save preset dialog
+    theme_ctrl.requestSavePreset()
+    assert theme_ctrl.showPresetSaveDialog is True
+    for _ in range(4):
+        app.processEvents()
+    theme_ctrl.cancelSavePreset()
+    assert theme_ctrl.showPresetSaveDialog is False
+    for _ in range(4):
+        app.processEvents()
+
+    # Create user preset and test delete dialog
+    assert theme_ctrl.confirmSavePreset("Qml Test Preset") is True
+    theme_ctrl.requestDeletePreset("qml_test_preset")
+    assert theme_ctrl.showPresetDeleteDialog is True
+    for _ in range(4):
+        app.processEvents()
+    theme_ctrl.cancelDeletePreset()
+    assert theme_ctrl.showPresetDeleteDialog is False
+    for _ in range(4):
+        app.processEvents()
+    # Clean up created preset
+    theme_ctrl.requestDeletePreset("qml_test_preset")
+    theme_ctrl.confirmDeletePreset()
+
+
+
 
 

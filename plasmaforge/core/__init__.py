@@ -32,6 +32,14 @@ from plasmaforge.core.profiles import (
     SetupProfile,
     get_curated_profiles,
 )
+from plasmaforge.core.theme_presets import (
+    ThemeColors,
+    ThemePreset,
+    ThemePresetManager,
+    ThemeTypography,
+    ThemeValidationError,
+    get_builtin_theme_presets,
+)
 
 __all__ = [
     "AppConfig",
@@ -62,5 +70,11 @@ __all__ = [
     "ProfileManager",
     "SetupProfile",
     "get_curated_profiles",
+    "ThemeColors",
+    "ThemePreset",
+    "ThemePresetManager",
+    "ThemeTypography",
+    "ThemeValidationError",
+    "get_builtin_theme_presets",
 ]
 

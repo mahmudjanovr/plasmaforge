@@ -114,6 +114,11 @@ def create_application(argv: list[str] | None = None) -> tuple[QGuiApplication, 
             app_ctrl.showToast(msg, "success" if ok else "error")
         )
     )
+    theme_ctrl.presetOperationCompleted.connect(
+        lambda msg, ok: (
+            app_ctrl.showToast(msg, "success" if ok else "error")
+        )
+    )
 
 
     engine = QQmlApplicationEngine()
