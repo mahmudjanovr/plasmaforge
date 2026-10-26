@@ -45,6 +45,18 @@ Item {
                 spacing: Theme.spaceSm
 
                 PFButton {
+                    text: DesktopCtrl.isInspecting ? "Inspecting..." : "Refresh Inspection"
+                    iconText: "⟳"
+                    variant: "secondary"
+                    size: "sm"
+                    enabled: !DesktopCtrl.isInspecting
+                    onClicked: {
+                        DesktopCtrl.refreshInspection()
+                        AppCtrl.showToast("Inspecting live KDE Plasma desktop...", "info")
+                    }
+                }
+
+                PFButton {
                     text: "Reset Draft"
                     iconText: "↺"
                     variant: "secondary"
@@ -92,7 +104,19 @@ Item {
             spacing: Theme.spaceMd
 
             PFBadge {
-                text: "Detected: " + (DesktopCtrl.detectedLayout.name || "KDE Desktop")
+                text: "Source: " + (DesktopCtrl.inspectionSource === "live_system" ? "Live D-Bus" : (DesktopCtrl.inspectionSource === "inferred_config" ? "Inferred Config" : "Unavailable"))
+                variant: DesktopCtrl.inspectionSource === "live_system" ? "accent" : (DesktopCtrl.inspectionSource === "inferred_config" ? "warning" : "neutral")
+                size: "sm"
+            }
+
+            PFBadge {
+                text: "Inspected: " + (DesktopCtrl.lastInspectionTime || "Never")
+                variant: "neutral"
+                size: "sm"
+            }
+
+            PFBadge {
+                text: "Plasma " + (DesktopCtrl.environmentInfo.plasma_version || "6") + " (" + (DesktopCtrl.environmentInfo.session_type || "Wayland") + ")"
                 variant: "neutral"
                 size: "sm"
             }
@@ -106,6 +130,13 @@ Item {
             PFBadge {
                 text: AppCtrl.safeMode ? "Safe Mode (Simulation)" : "Live Mode"
                 variant: AppCtrl.safeMode ? "accent" : "warning"
+                size: "sm"
+            }
+
+            PFBadge {
+                visible: DesktopCtrl.hasProposedChanges
+                text: DesktopCtrl.proposedChanges.length + " Proposed Change" + (DesktopCtrl.proposedChanges.length > 1 ? "s" : "")
+                variant: "accent"
                 size: "sm"
             }
 
@@ -142,18 +173,29 @@ Item {
                     Item { width: Theme.spaceSm; height: 1 }
 
                     PFBadge {
-                        text: "Output: Wayland (1920×1080)"
+                        text: "Display: " + (DesktopCtrl.environmentInfo.display_summary || "Output")
                         variant: "neutral"
                         size: "xs"
                     }
+
+                    Repeater {
+                        model: DesktopCtrl.livePanels
+                        delegate: PFBadge {
+                            text: (modelData.is_dock ? "Dock" : "Panel") + (modelData.containment_id ? (" #" + modelData.containment_id) : "") + ": " + modelData.position + " (" + modelData.thickness + "px)"
+                            variant: "neutral"
+                            size: "xs"
+                        }
+                    }
+
                     PFBadge {
-                        text: "Live: Panel Containment 47"
+                        text: "Live Widgets: " + DesktopCtrl.liveDesktopWidgets.length + " detected"
                         variant: "neutral"
                         size: "xs"
                     }
+
                     PFBadge {
-                        text: "Simulation: Dock Float & Widgets"
-                        variant: "accent"
+                        text: "Theme: " + (DesktopCtrl.environmentInfo.active_look_and_feel || "Breeze")
+                        variant: "neutral"
                         size: "xs"
                     }
                 }
@@ -446,6 +488,492 @@ Item {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Proposed Changes Preview Card (Draft Workbench vs Detected Live)
+        PFCard {
+            visible: DesktopCtrl.hasProposedChanges
+            Layout.fillWidth: true
+            implicitHeight: proposedChangesCol.implicitHeight + (Theme.spaceLg * 2)
+
+            ColumnLayout {
+                id: proposedChangesCol
+                anchors.fill: parent
+                anchors.margins: Theme.spaceLg
+                spacing: Theme.spaceMd
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceSm
+
+                    Rectangle {
+                        width: 28
+                        height: 28
+                        radius: Theme.radiusSm
+                        color: Qt.rgba(0.08, 0.72, 0.65, 0.15)
+                        border.color: Theme.accent
+                        border.width: 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Δ"
+                            font.pixelSize: 14
+                            font.weight: Font.Bold
+                            color: Theme.accentLight
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text {
+                            text: "PROPOSED BLUEPRINT CHANGES (" + DesktopCtrl.proposedChanges.length + ")"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            font.weight: Font.DemiBold
+                            color: Theme.accentLight
+                        }
+                        Text {
+                            text: "Modifications staged in draft workbench ready for transactional review and apply"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textMuted
+                        }
+                    }
+
+                    PFBadge {
+                        text: "Staged Changes"
+                        variant: "accent"
+                        size: "sm"
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Theme.borderSubtle
+                }
+
+                // Changes Repeater
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceSm
+
+                    Repeater {
+                        model: DesktopCtrl.proposedChanges
+
+                        delegate: Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: changeItemCol.implicitHeight + 16
+                            radius: Theme.radiusSm
+                            color: Qt.rgba(1, 1, 1, 0.02)
+                            border.color: Theme.borderSubtle
+                            border.width: 1
+
+                            ColumnLayout {
+                                id: changeItemCol
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 6
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: Theme.spaceSm
+
+                                    Text {
+                                        text: modelData.component
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSm
+                                        font.weight: Font.DemiBold
+                                        color: Theme.textPrimary
+                                        Layout.fillWidth: true
+                                    }
+
+                                    PFBadge {
+                                        text: modelData.is_supported_live ? "Live Applicable" : "Preview Simulation"
+                                        variant: modelData.is_supported_live ? "success" : "neutral"
+                                        size: "xs"
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: Theme.spaceMd
+
+                                    RowLayout {
+                                        spacing: 6
+                                        Text { text: "Current:"; font.pixelSize: Theme.fontSizeXs; color: Theme.textMuted }
+                                        Text { text: modelData.current_value; font.family: Theme.fontMono; font.pixelSize: Theme.fontSizeXs; font.weight: Font.DemiBold; color: Theme.textSecondary }
+                                    }
+
+                                    Text { text: "→"; font.pixelSize: Theme.fontSizeSm; color: Theme.accentLight }
+
+                                    RowLayout {
+                                        spacing: 6
+                                        Text { text: "Proposed:"; font.pixelSize: Theme.fontSizeXs; color: Theme.textMuted }
+                                        Text { text: modelData.proposed_value; font.family: Theme.fontMono; font.pixelSize: Theme.fontSizeXs; font.weight: Font.Bold; color: Theme.accentLight }
+                                    }
+
+                                    Item { Layout.fillWidth: true }
+                                }
+
+                                Text {
+                                    text: modelData.description
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeXs
+                                    color: Theme.textMuted
+                                    wrapMode: Text.WordWrap
+                                    Layout.fillWidth: true
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Live Detected Desktop Environment & Panels Inspector
+        PFCard {
+            Layout.fillWidth: true
+            implicitHeight: liveInspectorCol.implicitHeight + (Theme.spaceLg * 2)
+
+            ColumnLayout {
+                id: liveInspectorCol
+                anchors.fill: parent
+                anchors.margins: Theme.spaceLg
+                spacing: Theme.spaceMd
+
+                // Header
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceSm
+
+                    Rectangle {
+                        width: 28
+                        height: 28
+                        radius: Theme.radiusSm
+                        color: Qt.rgba(0.23, 0.51, 0.96, 0.15)
+                        border.color: "#3b82f6"
+                        border.width: 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: "🔍"
+                            font.pixelSize: 14
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        RowLayout {
+                            spacing: Theme.spaceSm
+                            Text {
+                                text: "LIVE KDE PLASMA 6 INSPECTOR"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeXs
+                                font.weight: Font.DemiBold
+                                color: "#60a5fa"
+                            }
+                            PFBadge {
+                                text: "Read-Only Discovery"
+                                variant: "neutral"
+                                size: "xs"
+                            }
+                        }
+                        Text {
+                            text: DesktopCtrl.inspectionStatusText || "Real-time state discovered via KDE Plasma D-Bus & configuration"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textMuted
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    PFButton {
+                        text: DesktopCtrl.isInspecting ? "Inspecting..." : "Refresh"
+                        iconText: "⟳"
+                        variant: "secondary"
+                        size: "sm"
+                        enabled: !DesktopCtrl.isInspecting
+                        onClicked: DesktopCtrl.refreshInspection()
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Theme.borderSubtle
+                }
+
+                // Environment Summary Grid
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: desktopBuilderRoot.width > 760 ? 4 : (desktopBuilderRoot.width > 520 ? 2 : 1)
+                    columnSpacing: Theme.spaceMd
+                    rowSpacing: Theme.spaceSm
+
+                    ColumnLayout {
+                        spacing: 2
+                        Text { text: "Plasma & Session"; font.pixelSize: Theme.fontSizeXs; color: Theme.textMuted }
+                        Text {
+                            text: (DesktopCtrl.environmentInfo.plasma_version || "6.x") + " • " + (DesktopCtrl.environmentInfo.session_type || "Wayland")
+                            font.family: Theme.fontMono
+                            font.pixelSize: Theme.fontSizeSm
+                            font.weight: Font.DemiBold
+                            color: Theme.textPrimary
+                        }
+                    }
+
+                    ColumnLayout {
+                        spacing: 2
+                        Text { text: "Display Resolution"; font.pixelSize: Theme.fontSizeXs; color: Theme.textMuted }
+                        Text {
+                            text: DesktopCtrl.environmentInfo.display_summary || "1920×1080"
+                            font.family: Theme.fontMono
+                            font.pixelSize: Theme.fontSizeSm
+                            font.weight: Font.DemiBold
+                            color: Theme.textPrimary
+                        }
+                    }
+
+                    ColumnLayout {
+                        spacing: 2
+                        Text { text: "Global Theme / Look&Feel"; font.pixelSize: Theme.fontSizeXs; color: Theme.textMuted }
+                        Text {
+                            text: DesktopCtrl.environmentInfo.active_look_and_feel || "org.kde.breeze.desktop"
+                            font.family: Theme.fontMono
+                            font.pixelSize: Theme.fontSizeSm
+                            font.weight: Font.DemiBold
+                            color: Theme.accentLight
+                            elide: Text.ElideMiddle
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    ColumnLayout {
+                        spacing: 2
+                        Text { text: "Inspection Source"; font.pixelSize: Theme.fontSizeXs; color: Theme.textMuted }
+                        RowLayout {
+                            spacing: 4
+                            Rectangle {
+                                width: 8
+                                height: 8
+                                radius: 4
+                                color: DesktopCtrl.inspectionSource === "live_system" ? "#10b981" : "#f59e0b"
+                            }
+                            Text {
+                                text: DesktopCtrl.inspectionSource === "live_system" ? "Live D-Bus Session" : "Inferred On-Disk Config"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeXs
+                                font.weight: Font.DemiBold
+                                color: Theme.textPrimary
+                            }
+                        }
+                    }
+                }
+
+                // Detected Panels Header
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceSm
+                    Layout.topMargin: Theme.spaceSm
+
+                    Text {
+                        text: "DETECTED PLASMA CONTAINMENTS (" + DesktopCtrl.livePanels.length + ")"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeXs
+                        font.weight: Font.DemiBold
+                        color: Theme.textMuted
+                    }
+                }
+
+                // Empty state if 0 panels
+                PFEmptyState {
+                    visible: DesktopCtrl.livePanels.length === 0 && !DesktopCtrl.isInspecting
+                    title: "No Panels Detected"
+                    description: "No KDE Plasma panels or docks found on the active screen output."
+                    statusTag: "Inspection Result"
+                    iconSymbol: "◫"
+                    Layout.fillWidth: true
+                }
+
+                // Detected Panels Breakdown
+                ColumnLayout {
+                    visible: DesktopCtrl.livePanels.length > 0
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceSm
+
+                    Repeater {
+                        model: DesktopCtrl.livePanels
+
+                        delegate: Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: panelCardCol.implicitHeight + 16
+                            radius: Theme.radiusSm
+                            color: Qt.rgba(1, 1, 1, 0.02)
+                            border.color: Theme.borderSubtle
+                            border.width: 1
+
+                            ColumnLayout {
+                                id: panelCardCol
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 6
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: Theme.spaceSm
+
+                                    Text {
+                                        text: (modelData.is_dock ? "Dock" : "Panel") + " (" + modelData.position.toUpperCase() + ")"
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSm
+                                        font.weight: Font.DemiBold
+                                        color: Theme.textPrimary
+                                    }
+
+                                    PFBadge {
+                                        visible: Boolean(modelData.containment_id)
+                                        text: "Containment #" + modelData.containment_id
+                                        variant: "neutral"
+                                        size: "xs"
+                                    }
+
+                                    PFBadge {
+                                        text: modelData.thickness + "px"
+                                        variant: "neutral"
+                                        size: "xs"
+                                    }
+
+                                    PFBadge {
+                                        text: modelData.visibility
+                                        variant: "neutral"
+                                        size: "xs"
+                                    }
+
+                                    PFBadge {
+                                        text: modelData.source === "live_system" ? "Live D-Bus" : "Disk Config"
+                                        variant: modelData.source === "live_system" ? "success" : "warning"
+                                        size: "xs"
+                                    }
+
+                                    Item { Layout.fillWidth: true }
+
+                                    Text {
+                                        text: modelData.applets.length + " Applets"
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeXs
+                                        color: Theme.textMuted
+                                    }
+                                }
+
+                                // Applets flow
+                                Flow {
+                                    Layout.fillWidth: true
+                                    spacing: 4
+
+                                    Repeater {
+                                        model: modelData.applets
+
+                                        delegate: Rectangle {
+                                            height: 20
+                                            implicitWidth: appletRow.implicitWidth + 12
+                                            radius: 3
+                                            color: Qt.rgba(1, 1, 1, 0.05)
+                                            border.color: Qt.rgba(1, 1, 1, 0.1)
+                                            border.width: 1
+
+                                            RowLayout {
+                                                id: appletRow
+                                                anchors.centerIn: parent
+                                                spacing: 4
+                                                Text {
+                                                    text: modelData.title || modelData.plugin.replace("org.kde.plasma.", "").replace("org.kde.", "")
+                                                    font.family: Theme.fontMono
+                                                    font.pixelSize: 9
+                                                    color: Theme.textSecondary
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Desktop Widgets & Wallpaper info row
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceMd
+                    Layout.topMargin: Theme.spaceSm
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text { text: "Desktop Wallpaper"; font.pixelSize: Theme.fontSizeXs; color: Theme.textMuted }
+                        Text {
+                            text: DesktopCtrl.liveWallpaper ? DesktopCtrl.liveWallpaper.split("/").pop() : "Default KDE Wallpaper"
+                            font.family: Theme.fontMono
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textSecondary
+                            elide: Text.ElideMiddle
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    ColumnLayout {
+                        spacing: 2
+                        Text { text: "Desktop Widgets"; font.pixelSize: Theme.fontSizeXs; color: Theme.textMuted }
+                        Text {
+                            text: DesktopCtrl.liveDesktopWidgets.length > 0
+                                ? DesktopCtrl.liveDesktopWidgets.length + " widgets detected"
+                                : "No widgets on desktop layer"
+                            font.family: Theme.fontMono
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textSecondary
+                        }
+                    }
+                }
+
+                // Explicit Unsupported Capabilities Notice
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: unsuppCol.implicitHeight + 16
+                    radius: Theme.radiusSm
+                    color: Qt.rgba(0.96, 0.62, 0.04, 0.08)
+                    border.color: Qt.rgba(0.96, 0.62, 0.04, 0.25)
+                    border.width: 1
+
+                    ColumnLayout {
+                        id: unsuppCol
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 4
+
+                        RowLayout {
+                            spacing: 6
+                            Text { text: "⚠️"; font.pixelSize: 12 }
+                            Text {
+                                text: "Platform Capabilities & Safe Boundaries:"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeXs
+                                font.weight: Font.DemiBold
+                                color: Theme.warning
+                            }
+                        }
+
+                        Text {
+                            text: "• Supported Live: Panel edge position, thickness, and visibility mode.\n• Unsupported / Preview Only: Freeform desktop widget coordinate dragging, dynamic applet injection, and live desktop framebuffer capture are not exposed through safe KDE scripting interfaces and remain preview-only."
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textSecondary
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
                         }
                     }
                 }

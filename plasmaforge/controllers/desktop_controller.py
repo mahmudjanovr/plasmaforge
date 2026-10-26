@@ -1,25 +1,41 @@
-"""Desktop controller coordinating layout detection, editable draft workbench, presets, and safe transactional apply."""
+"""Desktop controller coordinating live desktop inspection, editable draft workbench, presets, and safe transactional apply."""
 
 from __future__ import annotations
 
+import concurrent.futures
+import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from plasmaforge.core.backup_manager import BackupManager
 from plasmaforge.core.config import get_config, save_config
+from plasmaforge.core.desktop_inspector import (
+    DesktopChangeAnalyzer,
+    DesktopEnvironmentDetector,
+    DesktopLayoutInspector,
+    LiveDesktopState,
+    ProposedChange,
+)
 from plasmaforge.core.desktop_layout import (
     DesktopLayout,
     DesktopLayoutApplier,
     detect_desktop_layout,
     get_layout_presets,
-    get_layout_presets,
 )
 from plasmaforge.core.transaction import TransactionResult, TransactionState
 
 
+class DesktopWorkerSignals(QObject):
+    """Thread-safe signal dispatcher for desktop inspection worker."""
+
+    inspectionCompleted = Signal(object)  # LiveDesktopState
+    inspectionFailed = Signal(str)
+
+
 class DesktopController(QObject):
-    """Exposes desktop layout blueprints, interactive draft editing, and safe apply to QML."""
+    """Exposes live desktop environment inspection, layout blueprints, interactive draft editing, and safe apply to QML."""
 
     layoutChanged = Signal()
     draftChanged = Signal()
@@ -28,11 +44,25 @@ class DesktopController(QObject):
     applyFinished = Signal(bool, str, bool)  # success, message, is_dry_run
     restoreFinished = Signal(bool, str)
 
-    def __init__(self, parent: QObject | None = None) -> None:
+    # Live inspection signals
+    inspectionStateChanged = Signal()
+    environmentChanged = Signal()
+    proposedChangesChanged = Signal()
+
+    def __init__(
+        self,
+        parent: QObject | None = None,
+        inspector: Optional[DesktopLayoutInspector] = None,
+        detector: Optional[DesktopEnvironmentDetector] = None,
+        applier: Optional[DesktopLayoutApplier] = None,
+    ) -> None:
         super().__init__(parent)
         self._config = get_config()
         self._backup_manager = BackupManager()
-        self._applier = DesktopLayoutApplier(
+
+        self._detector = detector or DesktopEnvironmentDetector()
+        self._inspector = inspector or DesktopLayoutInspector(detector=self._detector)
+        self._applier = applier or DesktopLayoutApplier(
             backup_manager=self._backup_manager,
             safe_mode=self._config.safe_mode,
         )
@@ -40,6 +70,12 @@ class DesktopController(QObject):
         self._presets = [p.to_dict() for p in get_layout_presets()]
         self._selected_preset_id = ""
 
+        # Live inspection state
+        self._is_inspecting = False
+        self._live_state: LiveDesktopState = self._inspector.inspect_desktop()
+        self._last_inspection_time = self._format_timestamp(self._live_state.timestamp)
+
+        # Sync detected blueprint from live state
         self._detected_layout: DesktopLayout = detect_desktop_layout()
         self._draft_layout: DesktopLayout = DesktopLayout.from_dict(self._detected_layout.to_dict())
         self._draft_layout.id = "custom_draft"
@@ -50,14 +86,148 @@ class DesktopController(QObject):
         self._is_applying = False
         self._last_backup_id = ""
 
-        self.refresh()
+        # Proposed changes list
+        self._proposed_changes: List[Dict[str, Any]] = []
+        self._recompute_proposed_changes()
+
+        # Background threading
+        self._executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=2,
+            thread_name_prefix="pf_desktop_",
+        )
+        self._signals = DesktopWorkerSignals(self)
+        self._signals.inspectionCompleted.connect(self._on_inspection_completed)
+        self._signals.inspectionFailed.connect(self._on_inspection_failed)
+
+        # Wire draft changes to update proposed changes
+        self.draftChanged.connect(self._recompute_proposed_changes)
+
+    def _format_timestamp(self, iso_str: str) -> str:
+        """Format ISO timestamp to readable local time string."""
+        if not iso_str:
+            return "Just now"
+        try:
+            dt = datetime.datetime.fromisoformat(iso_str)
+            local_dt = dt.astimezone()
+            return local_dt.strftime("%H:%M:%S")
+        except Exception:
+            return "Just now"
+
+    # ==========================================
+    # Live Inspection Slots & Properties
+    # ==========================================
+    @Slot()
+    def refreshInspection(self) -> None:
+        """Start asynchronous inspection of the live KDE Plasma desktop."""
+        if self._is_inspecting:
+            return
+
+        self._is_inspecting = True
+        self.inspectionStateChanged.emit()
+
+        def worker() -> None:
+            try:
+                state = self._inspector.inspect_desktop()
+                self._signals.inspectionCompleted.emit(state)
+            except Exception as e:
+                self._signals.inspectionFailed.emit(str(e))
+
+        self._executor.submit(worker)
 
     @Slot()
     def refresh(self) -> None:
         """Re-detect active layout from KDE configuration files."""
-        self._detected_layout = detect_desktop_layout()
+        config_path = None
+        if hasattr(self._applier, "source_config_dir") and self._applier.source_config_dir:
+            config_path = self._applier.source_config_dir / "plasma-org.kde.plasma.desktop-appletsrc"
+        self._detected_layout = detect_desktop_layout(config_path=config_path)
+        self._recompute_proposed_changes()
         self.layoutChanged.emit()
 
+    def _on_inspection_completed(self, state: LiveDesktopState) -> None:
+        """Handle inspection complete on the GUI thread."""
+        self._live_state = state
+        self._last_inspection_time = self._format_timestamp(state.timestamp)
+        self._is_inspecting = False
+
+        self._detected_layout = detect_desktop_layout()
+        self._recompute_proposed_changes()
+
+        self.inspectionStateChanged.emit()
+        self.environmentChanged.emit()
+        self.layoutChanged.emit()
+
+    def _on_inspection_failed(self, err_msg: str) -> None:
+        """Handle inspection failure."""
+        self._is_inspecting = False
+        self._live_state.status_message = f"Inspection error: {err_msg}"
+        self.inspectionStateChanged.emit()
+
+    def _recompute_proposed_changes(self) -> None:
+        """Compare detected layout with current workbench draft."""
+        if not self.isDraftModified:
+            self._proposed_changes = []
+        else:
+            changes = DesktopChangeAnalyzer.compare_states(
+                self._detected_layout, self._draft_layout
+            )
+            self._proposed_changes = [c.to_dict() for c in changes]
+        self.proposedChangesChanged.emit()
+
+    @Property(bool, notify=inspectionStateChanged)
+    def isInspecting(self) -> bool:
+        return self._is_inspecting
+
+    @Property(str, notify=inspectionStateChanged)
+    def lastInspectionTime(self) -> str:
+        return self._last_inspection_time
+
+    @Property(str, notify=inspectionStateChanged)
+    def inspectionSource(self) -> str:
+        return self._live_state.inspection_source
+
+    @Property(str, notify=inspectionStateChanged)
+    def inspectionStatusText(self) -> str:
+        return self._live_state.status_message
+
+    @Property("QVariantMap", notify=environmentChanged)
+    def environmentInfo(self) -> Dict[str, Any]:
+        return {
+            "plasma_version": self._live_state.plasma_version,
+            "session_type": self._live_state.session_type,
+            "distribution": self._live_state.distribution,
+            "display_summary": self._live_state.display_summary,
+            "displays": [d.to_dict() for d in self._live_state.displays],
+            "active_look_and_feel": self._live_state.active_look_and_feel,
+        }
+
+    @Property("QVariantList", notify=inspectionStateChanged)
+    def livePanels(self) -> List[Dict[str, Any]]:
+        return [p.to_dict() for p in self._live_state.panels]
+
+    @Property("QVariantList", notify=inspectionStateChanged)
+    def liveDesktopWidgets(self) -> List[Dict[str, Any]]:
+        return [w.to_dict() for w in self._live_state.desktop_widgets]
+
+    @Property(str, notify=inspectionStateChanged)
+    def liveWallpaper(self) -> str:
+        return self._live_state.wallpaper_image
+
+    @Property("QVariantMap", notify=inspectionStateChanged)
+    def inspectionCapabilities(self) -> Dict[str, bool]:
+        return self._live_state.capabilities
+
+    @Property("QVariantList", notify=inspectionStateChanged)
+    def unsupportedFeatures(self) -> List[str]:
+        return self._live_state.unsupported_features
+
+    @Property("QVariantList", notify=proposedChangesChanged)
+    def proposedChanges(self) -> List[Dict[str, Any]]:
+        return self._proposed_changes
+
+    # ==========================================
+    # Legacy & Workbench Properties
+    # ==========================================
     @Property("QVariantMap", notify=layoutChanged)
     def detectedLayout(self) -> Dict[str, Any]:
         return self._detected_layout.to_dict()
@@ -89,6 +259,10 @@ class DesktopController(QObject):
             or d.dock.visibility != c.dock.visibility
             or d.show_widgets != c.show_widgets
         )
+
+    @Property(bool, notify=proposedChangesChanged)
+    def hasProposedChanges(self) -> bool:
+        return len(self._proposed_changes) > 0
 
     @Property(str, notify=diffPreviewReady)
     def currentDiffPreview(self) -> str:
@@ -208,7 +382,6 @@ class DesktopController(QObject):
         """Load a curated preset into the editable draft workbench."""
         for p in get_layout_presets():
             if p.id == preset_id:
-                # Copy preset into draft, preserving containment ids from detected layout
                 top_cid = self._detected_layout.top_panel.containment_id
                 dock_cid = self._detected_layout.dock.containment_id
 
@@ -279,7 +452,7 @@ class DesktopController(QObject):
         if res.success and not res.is_dry_run:
             self._last_backup_id = res.backup_id
             self.restoreFinished.emit(True, "Layout applied and verified on disk.")
-            self.refresh()
+            self.refreshInspection()
 
         self.applyFinished.emit(res.success, res.message, res.is_dry_run)
 
@@ -299,7 +472,7 @@ class DesktopController(QObject):
 
         if res.success:
             self._last_backup_id = ""
-            self.refresh()
+            self.refreshInspection()
             self.resetDraft()
 
         self.restoreFinished.emit(res.success, res.message)
