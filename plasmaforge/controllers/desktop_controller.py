@@ -48,6 +48,7 @@ class DesktopController(QObject):
     inspectionStateChanged = Signal()
     environmentChanged = Signal()
     proposedChangesChanged = Signal()
+    selectedPanelChanged = Signal()
 
     def __init__(
         self,
@@ -76,7 +77,10 @@ class DesktopController(QObject):
         self._last_inspection_time = self._format_timestamp(self._live_state.timestamp)
 
         # Sync detected blueprint from live state
-        self._detected_layout: DesktopLayout = detect_desktop_layout()
+        config_path = None
+        if hasattr(self._applier, "source_config_dir") and self._applier.source_config_dir:
+            config_path = self._applier.source_config_dir / "plasma-org.kde.plasma.desktop-appletsrc"
+        self._detected_layout: DesktopLayout = detect_desktop_layout(config_path=config_path)
         self._draft_layout: DesktopLayout = DesktopLayout.from_dict(self._detected_layout.to_dict())
         self._draft_layout.id = "custom_draft"
         self._draft_layout.name = "Custom Layout Draft"
@@ -85,6 +89,12 @@ class DesktopController(QObject):
         self._show_confirm_dialog = False
         self._is_applying = False
         self._last_backup_id = ""
+
+        # Selected panel state for granular editing
+        self._selected_panel_id = ""
+        self._selected_panel_index = 0
+        if self._live_state.panels:
+            self._selected_panel_id = self._live_state.panels[0].containment_id or self._live_state.panels[0].id
 
         # Proposed changes list
         self._proposed_changes: List[Dict[str, Any]] = []
@@ -150,7 +160,15 @@ class DesktopController(QObject):
         self._last_inspection_time = self._format_timestamp(state.timestamp)
         self._is_inspecting = False
 
-        self._detected_layout = detect_desktop_layout()
+        if not self._selected_panel_id and state.panels:
+            self._selected_panel_id = state.panels[0].containment_id or state.panels[0].id
+            self._selected_panel_index = 0
+            self.selectedPanelChanged.emit()
+
+        config_path = None
+        if hasattr(self._applier, "source_config_dir") and self._applier.source_config_dir:
+            config_path = self._applier.source_config_dir / "plasma-org.kde.plasma.desktop-appletsrc"
+        self._detected_layout = detect_desktop_layout(config_path=config_path)
         self._recompute_proposed_changes()
 
         self.inspectionStateChanged.emit()
@@ -283,6 +301,137 @@ class DesktopController(QObject):
     @Property(str, notify=restoreFinished)
     def lastBackupId(self) -> str:
         return self._last_backup_id
+
+    # ------------------------------------------
+    # Multi-Panel Selection & Editing
+    # ------------------------------------------
+    def _get_selected_live_panel(self) -> Optional[DetectedPanelInfo]:
+        if not self._live_state.panels:
+            return None
+        if self._selected_panel_id:
+            for p in self._live_state.panels:
+                if p.containment_id == self._selected_panel_id or p.id == self._selected_panel_id:
+                    return p
+        if 0 <= self._selected_panel_index < len(self._live_state.panels):
+            return self._live_state.panels[self._selected_panel_index]
+        return self._live_state.panels[0]
+
+    def _get_selected_draft_config(self) -> Optional[PanelConfig]:
+        live_p = self._get_selected_live_panel()
+        if not live_p:
+            return self._draft_layout.top_panel
+
+        cid = live_p.containment_id
+        if cid and self._draft_layout.top_panel.containment_id == cid:
+            return self._draft_layout.top_panel
+        if cid and self._draft_layout.dock.containment_id == cid:
+            return self._draft_layout.dock
+
+        if live_p.position == "top" or (not live_p.is_dock and live_p.position != "bottom"):
+            if not self._draft_layout.top_panel.containment_id and cid:
+                self._draft_layout.top_panel.containment_id = cid
+            return self._draft_layout.top_panel
+        else:
+            if not self._draft_layout.dock.containment_id and cid:
+                self._draft_layout.dock.containment_id = cid
+            return self._draft_layout.dock
+
+    @Property(str, notify=selectedPanelChanged)
+    def selectedPanelId(self) -> str:
+        return self._selected_panel_id
+
+    @Property(int, notify=selectedPanelChanged)
+    def selectedPanelIndex(self) -> int:
+        return self._selected_panel_index
+
+    @Property("QVariantMap", notify=selectedPanelChanged)
+    def selectedPanelInfo(self) -> Dict[str, Any]:
+        p = self._get_selected_live_panel()
+        if p:
+            return p.to_dict()
+        return {}
+
+    @Property(str, notify=draftChanged)
+    def selectedPanelPosition(self) -> str:
+        cfg = self._get_selected_draft_config()
+        return cfg.position if cfg else "top"
+
+    @Property(int, notify=draftChanged)
+    def selectedPanelThickness(self) -> int:
+        cfg = self._get_selected_draft_config()
+        return cfg.thickness if cfg else 36
+
+    @Property(str, notify=draftChanged)
+    def selectedPanelVisibility(self) -> str:
+        cfg = self._get_selected_draft_config()
+        return cfg.visibility if cfg else "always_visible"
+
+    @Property(bool, notify=inspectionStateChanged)
+    def isLiveEditingSupported(self) -> bool:
+        return self._applier.live_editor.is_live_dbus_supported()
+
+    @Property(bool, notify=selectedPanelChanged)
+    def selectedPanelIsLiveSupported(self) -> bool:
+        p = self._get_selected_live_panel()
+        if not p or not p.containment_id:
+            return False
+        return self._applier.live_editor.is_live_dbus_supported()
+
+    @Property(bool, notify=draftChanged)
+    def selectedPanelHasChanges(self) -> bool:
+        live_p = self._get_selected_live_panel()
+        draft_cfg = self._get_selected_draft_config()
+        if not live_p or not draft_cfg:
+            return False
+        return (
+            live_p.position != draft_cfg.position
+            or abs(live_p.thickness - draft_cfg.thickness) >= 2
+            or live_p.visibility != draft_cfg.visibility
+        )
+
+    @Slot(str)
+    def selectPanel(self, panel_id: str) -> None:
+        """Select a detected panel containment for editing."""
+        if self._selected_panel_id != panel_id:
+            self._selected_panel_id = panel_id
+            for idx, p in enumerate(self._live_state.panels):
+                if p.containment_id == panel_id or p.id == panel_id:
+                    self._selected_panel_index = idx
+                    break
+            self.selectedPanelChanged.emit()
+
+    @Slot(int)
+    def selectPanelByIndex(self, index: int) -> None:
+        if 0 <= index < len(self._live_state.panels):
+            p = self._live_state.panels[index]
+            self._selected_panel_index = index
+            self._selected_panel_id = p.containment_id or p.id
+            self.selectedPanelChanged.emit()
+
+    @Slot(str)
+    def setSelectedPanelPosition(self, pos: str) -> None:
+        cfg = self._get_selected_draft_config()
+        if cfg and cfg.position != pos:
+            cfg.position = pos
+            self._selected_preset_id = "custom"
+            self.draftChanged.emit()
+
+    @Slot(int)
+    def setSelectedPanelThickness(self, val: int) -> None:
+        clamped = max(16, min(128, val))
+        cfg = self._get_selected_draft_config()
+        if cfg and cfg.thickness != clamped:
+            cfg.thickness = clamped
+            self._selected_preset_id = "custom"
+            self.draftChanged.emit()
+
+    @Slot(str)
+    def setSelectedPanelVisibility(self, vis: str) -> None:
+        cfg = self._get_selected_draft_config()
+        if cfg and cfg.visibility != vis:
+            cfg.visibility = vis
+            self._selected_preset_id = "custom"
+            self.draftChanged.emit()
 
     # Granular bindings for QML sliders/radios
     @Property(str, notify=draftChanged)
@@ -471,6 +620,22 @@ class DesktopController(QObject):
         )
 
         if res.success:
+            # Revert live D-Bus panel properties if live D-Bus is supported and safe mode is not forced
+            if not get_config().safe_mode and self._applier.live_editor.is_live_dbus_supported():
+                try:
+                    config_file = self._applier.source_config_dir / "plasma-org.kde.plasma.desktop-appletsrc"
+                    restored_layout = detect_desktop_layout(config_file)
+                    for p in [restored_layout.top_panel, restored_layout.dock]:
+                        if p.containment_id and p.position != "none":
+                            self._applier.live_editor.apply_panel_properties(
+                                containment_id=p.containment_id,
+                                location=p.position,
+                                height=p.thickness,
+                                visibility=p.visibility,
+                            )
+                except Exception:
+                    pass
+
             self._last_backup_id = ""
             self.refreshInspection()
             self.resetDraft()

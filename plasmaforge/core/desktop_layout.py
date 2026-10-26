@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from plasmaforge.core.backup_manager import BackupManager
+from plasmaforge.core.kde_panel_editor import KdePanelLiveEditor
 from plasmaforge.core.transaction import (
     ApplyOperation,
     TransactionalSafetyEngine,
@@ -37,6 +38,8 @@ class PanelVisibility(str, Enum):
     ALWAYS_VISIBLE = "always_visible"
     AUTO_HIDE = "auto_hide"
     DODGE_WINDOWS = "dodge_windows"
+    WINDOWS_GO_BELOW = "windows_go_below"
+    WINDOWS_BELOW = "windows_below"
 
 
 LOCATION_TO_POS: Dict[int, str] = {
@@ -58,13 +61,14 @@ VISIBILITY_TO_NAME: Dict[int, str] = {
     0: "always_visible",
     1: "auto_hide",
     2: "dodge_windows",
-    3: "windows_below",
+    3: "windows_go_below",
 }
 
 NAME_TO_VISIBILITY: Dict[str, int] = {
     "always_visible": 0,
     "auto_hide": 1,
     "dodge_windows": 2,
+    "windows_go_below": 3,
     "windows_below": 3,
 }
 
@@ -351,6 +355,7 @@ class DesktopLayoutApplier:
         backup_manager: Optional[BackupManager] = None,
         safe_mode: bool = True,
         source_config_dir: Optional[Path] = None,
+        live_editor: Optional[KdePanelLiveEditor] = None,
     ) -> None:
         self.backup_manager = backup_manager or BackupManager()
         self.safe_mode = safe_mode
@@ -360,6 +365,7 @@ class DesktopLayoutApplier:
             safe_mode=self.safe_mode,
             source_config_dir=self.source_config_dir,
         )
+        self.live_editor = live_editor or KdePanelLiveEditor()
 
     def generate_diff_preview(self, target_layout: DesktopLayout) -> str:
         """Generate unified diff showing what ~/.config/plasma-org.kde.plasma.desktop-appletsrc would change."""
@@ -421,9 +427,16 @@ class DesktopLayoutApplier:
                 )
             )
 
+            dbus_status = (
+                "Supported (org.kde.PlasmaShell evaluateScript)"
+                if self.live_editor.is_live_dbus_supported()
+                else "Unavailable (deferred to session reload)"
+            )
+
             header = [
                 f"# Unified Diff Preview: Desktop Layout '{target_layout.name}'",
                 f"# Target: {config_file}",
+                f"# Live D-Bus apply: {dbus_status}",
                 f"# Supported live properties: panel position, thickness, visibility",
                 f"# Note: Widget placement, dock icon size, and floating dock padding are preview-only simulations.",
                 "--------------------------------------------------\n",
@@ -442,7 +455,7 @@ class DesktopLayoutApplier:
         target_layout: DesktopLayout,
         force_safe_mode: Optional[bool] = None,
     ) -> TransactionResult:
-        """Apply layout using the Phase 3 transactional safety engine."""
+        """Apply layout safely using transactional boundary and live D-Bus updates."""
         errors = target_layout.validate()
         if errors:
             return TransactionResult(
@@ -453,8 +466,12 @@ class DesktopLayoutApplier:
                 affected_files=["plasma-org.kde.plasma.desktop-appletsrc"],
             )
 
+        is_safe = self.safe_mode if force_safe_mode is None else force_safe_mode
         config_file = self.source_config_dir / "plasma-org.kde.plasma.desktop-appletsrc"
         diff_text = self.generate_diff_preview(target_layout)
+
+        live_revert_states: Dict[str, Dict[str, Any]] = {}
+        applied_live_containments: List[str] = []
 
         def apply_step() -> tuple[bool, str]:
             try:
@@ -465,9 +482,15 @@ class DesktopLayoutApplier:
 
                 detected = detect_desktop_layout(config_file)
 
-                # Update top panel
-                if detected.top_panel.containment_id:
-                    cid = detected.top_panel.containment_id
+                # Ensure containment IDs are resolved if not explicitly provided
+                if not target_layout.top_panel.containment_id and detected.top_panel.containment_id:
+                    target_layout.top_panel.containment_id = detected.top_panel.containment_id
+                if not target_layout.dock.containment_id and detected.dock.containment_id:
+                    target_layout.dock.containment_id = detected.dock.containment_id
+
+                # Update top panel on disk
+                if target_layout.top_panel.containment_id and target_layout.top_panel.position != "none":
+                    cid = target_layout.top_panel.containment_id
                     sec = f"Containments][{cid}"
                     if not parser.has_section(sec):
                         parser.add_section(sec)
@@ -477,9 +500,9 @@ class DesktopLayoutApplier:
                     parser.set(sec, "visibility", str(vis))
                     parser.set(sec, "thickness", str(target_layout.top_panel.thickness))
 
-                # Update dock
-                if detected.dock.containment_id:
-                    cid = detected.dock.containment_id
+                # Update dock on disk
+                if target_layout.dock.containment_id and target_layout.dock.position != "none":
+                    cid = target_layout.dock.containment_id
                     sec = f"Containments][{cid}"
                     if not parser.has_section(sec):
                         parser.add_section(sec)
@@ -493,19 +516,39 @@ class DesktopLayoutApplier:
                 with open(config_file, "w", encoding="utf-8") as f:
                     parser.write(f, space_around_delimiters=False)
 
-                if shutil.which("kwriteconfig6"):
-                    try:
-                        subprocess.run(
-                            ["kwriteconfig6", "--file", "plasma-org.kde.plasma.desktop-appletsrc", "--notify", ""],
-                            capture_output=True,
-                            timeout=2.0,
+                # Live D-Bus apply (if supported and not in safe mode)
+                if not is_safe and self.live_editor.is_live_dbus_supported():
+                    panels_to_edit: List[PanelConfig] = []
+                    if target_layout.top_panel.containment_id and target_layout.top_panel.position != "none":
+                        panels_to_edit.append(target_layout.top_panel)
+                    if target_layout.dock.containment_id and target_layout.dock.position != "none":
+                        panels_to_edit.append(target_layout.dock)
+
+                    for p_cfg in panels_to_edit:
+                        cid = p_cfg.containment_id
+                        assert cid is not None
+                        ok_live, audit, msg = self.live_editor.apply_panel_properties(
+                            containment_id=cid,
+                            location=p_cfg.position,
+                            height=p_cfg.thickness,
+                            visibility=p_cfg.visibility,
                         )
-                    except Exception:
-                        pass
+                        if ok_live:
+                            if "previous" in audit:
+                                live_revert_states[cid] = audit["previous"]
+                            applied_live_containments.append(cid)
+                        else:
+                            return False, f"Live application failed on panel #{cid}: {msg}"
+
+                    if applied_live_containments:
+                        return (
+                            True,
+                            f"Applied live via D-Bus and saved to disk (panels: {', '.join(applied_live_containments)}).",
+                        )
 
                 return (
                     True,
-                    "Layout settings saved to plasma-org.kde.plasma.desktop-appletsrc. Visual changes will apply on desktop refresh or next login (plasmashell kept running safely).",
+                    "Layout settings saved to plasma-org.kde.plasma.desktop-appletsrc. Visual changes will apply on desktop refresh or next login.",
                 )
             except Exception as e:
                 return False, f"Failed to write layout configuration: {e}"
@@ -514,17 +557,36 @@ class DesktopLayoutApplier:
             if not config_file.is_file():
                 return False, "Target configuration file missing after apply."
             try:
+                # 1. Verify disk persistence
                 verified_layout = detect_desktop_layout(config_file)
-                # Verify that positions match if containments were configured
-                if verified_layout.top_panel.containment_id and target_layout.top_panel.position != "none":
+                if target_layout.top_panel.containment_id and target_layout.top_panel.position != "none":
                     if verified_layout.top_panel.position != target_layout.top_panel.position:
                         return False, f"Verification failed: top panel position is '{verified_layout.top_panel.position}', expected '{target_layout.top_panel.position}'"
 
-                if verified_layout.dock.containment_id and target_layout.dock.position != "none":
+                if target_layout.dock.containment_id and target_layout.dock.position != "none":
                     if verified_layout.dock.position != target_layout.dock.position:
                         return False, f"Verification failed: dock position is '{verified_layout.dock.position}', expected '{target_layout.dock.position}'"
 
-                return True, "Layout configuration verified on disk."
+                # 2. Verify live D-Bus state if live apply was performed
+                if applied_live_containments and not is_safe and self.live_editor.is_live_dbus_supported():
+                    panels_to_verify: List[PanelConfig] = []
+                    if target_layout.top_panel.containment_id in applied_live_containments:
+                        panels_to_verify.append(target_layout.top_panel)
+                    if target_layout.dock.containment_id in applied_live_containments:
+                        panels_to_verify.append(target_layout.dock)
+
+                    for p_cfg in panels_to_verify:
+                        assert p_cfg.containment_id is not None
+                        ok_v, v_msg = self.live_editor.verify_panel_properties(
+                            containment_id=p_cfg.containment_id,
+                            expected_location=p_cfg.position,
+                            expected_height=p_cfg.thickness,
+                            expected_visibility=p_cfg.visibility,
+                        )
+                        if not ok_v:
+                            return False, f"Live verification failed: {v_msg}"
+
+                return True, "Layout configuration verified on disk and live desktop."
             except Exception as e:
                 return False, f"Verification error: {e}"
 
@@ -540,8 +602,15 @@ class DesktopLayoutApplier:
 
         self.safety_engine.safe_mode = self.safe_mode
         self.safety_engine.source_config_dir = self.source_config_dir
-        return self.safety_engine.execute(
+        res = self.safety_engine.execute(
             operation,
             confirmed=True,
             force_safe_mode=force_safe_mode,
         )
+
+        # On failure, revert live D-Bus state if any panels were modified live
+        if not res.success and live_revert_states:
+            for cid, prev_state in live_revert_states.items():
+                self.live_editor.revert_panel_properties(cid, prev_state)
+
+        return res

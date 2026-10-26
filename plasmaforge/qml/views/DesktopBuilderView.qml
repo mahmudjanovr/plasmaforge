@@ -1055,6 +1055,347 @@ Item {
             }
         }
 
+        // Safe Panel Editing Workbench Card (Multi-Panel Selection & Editing)
+        PFCard {
+            Layout.fillWidth: true
+            implicitHeight: selectedPanelCol.implicitHeight + (Theme.spaceLg * 2)
+
+            ColumnLayout {
+                id: selectedPanelCol
+                anchors.fill: parent
+                anchors.margins: Theme.spaceLg
+                spacing: Theme.spaceMd
+
+                // Header: Title, Live applicability, and reset button
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceSm
+
+                    Rectangle {
+                        width: 28
+                        height: 28
+                        radius: Theme.radiusSm
+                        color: Qt.rgba(0.08, 0.72, 0.65, 0.15)
+                        border.color: Theme.accent
+                        border.width: 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: "◫"
+                            font.pixelSize: 14
+                            color: Theme.accentLight
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        RowLayout {
+                            spacing: Theme.spaceSm
+                            Text {
+                                text: "SELECTED PANEL WORKBENCH"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeXs
+                                font.weight: Font.DemiBold
+                                color: Theme.accentLight
+                            }
+                            PFBadge {
+                                visible: Boolean(DesktopCtrl.selectedPanelId)
+                                text: "Containment #" + DesktopCtrl.selectedPanelId
+                                variant: "neutral"
+                                size: "xs"
+                            }
+                            PFBadge {
+                                text: DesktopCtrl.selectedPanelIsLiveSupported ? "Live D-Bus Supported" : "Deferred to Session Reload"
+                                variant: DesktopCtrl.selectedPanelIsLiveSupported ? "accent" : "warning"
+                                size: "xs"
+                            }
+                            PFBadge {
+                                visible: DesktopCtrl.selectedPanelHasChanges
+                                text: "Changes Staged"
+                                variant: "accent"
+                                size: "xs"
+                            }
+                        }
+                        Text {
+                            text: "Configure screen position, thickness, and visibility mode for the selected Plasma containment"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textMuted
+                        }
+                    }
+
+                    PFButton {
+                        text: "Discard Draft"
+                        iconText: "↺"
+                        variant: "secondary"
+                        size: "sm"
+                        enabled: DesktopCtrl.isDraftModified
+                        onClicked: {
+                            DesktopCtrl.resetDraft()
+                            AppCtrl.showToast("Draft changes discarded.", "info")
+                        }
+                    }
+                }
+
+                // Panel Selection Strip (Repeater of detected panels)
+                ColumnLayout {
+                    visible: DesktopCtrl.livePanels.length > 0
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Text {
+                        text: "Select Target Panel / Containment:"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeXs
+                        color: Theme.textMuted
+                    }
+
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: Theme.spaceSm
+
+                        Repeater {
+                            model: DesktopCtrl.livePanels
+
+                            delegate: Rectangle {
+                                readonly property bool isSelected: DesktopCtrl.selectedPanelId === (modelData.containment_id || modelData.id)
+                                height: 38
+                                implicitWidth: panelChipRow.implicitWidth + 24
+                                radius: Theme.radiusSm
+                                color: isSelected ? Qt.rgba(0.08, 0.72, 0.65, 0.15) : Qt.rgba(1, 1, 1, 0.03)
+                                border.color: isSelected ? Theme.accent : Theme.borderSubtle
+                                border.width: isSelected ? 2 : 1
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: DesktopCtrl.selectPanel(modelData.containment_id || modelData.id)
+                                }
+
+                                RowLayout {
+                                    id: panelChipRow
+                                    anchors.centerIn: parent
+                                    spacing: Theme.spaceSm
+
+                                    Text {
+                                        text: (modelData.is_dock ? "⚓ Dock" : "◫ Panel") + (modelData.containment_id ? (" #" + modelData.containment_id) : "")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeXs
+                                        font.weight: isSelected ? Font.Bold : Font.Normal
+                                        color: isSelected ? Theme.accentLight : Theme.textPrimary
+                                    }
+
+                                    PFBadge {
+                                        text: modelData.position.toUpperCase()
+                                        variant: isSelected ? "accent" : "neutral"
+                                        size: "xs"
+                                    }
+
+                                    PFBadge {
+                                        text: modelData.thickness + "px"
+                                        variant: "neutral"
+                                        size: "xs"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Theme.borderSubtle
+                }
+
+                // Controls Grid: Position, Thickness, Visibility
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: desktopBuilderRoot.width > 700 ? 3 : 1
+                    columnSpacing: Theme.spaceLg
+                    rowSpacing: Theme.spaceMd
+
+                    // 1. Edge Position
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spaceXs
+
+                        RowLayout {
+                            Text { text: "Screen-Edge Position"; font.pixelSize: Theme.fontSizeXs; font.weight: Font.DemiBold; color: Theme.textSecondary }
+                            Item { Layout.fillWidth: true }
+                            Text { text: DesktopCtrl.selectedPanelPosition.toUpperCase(); font.family: Theme.fontMono; font.pixelSize: Theme.fontSizeXs; font.weight: Font.Bold; color: Theme.accentLight }
+                        }
+
+                        GridLayout {
+                            columns: 2
+                            Layout.fillWidth: true
+                            columnSpacing: 6
+                            rowSpacing: 6
+
+                            PFButton {
+                                Layout.fillWidth: true
+                                text: "Top"
+                                size: "sm"
+                                variant: DesktopCtrl.selectedPanelPosition === "top" ? "primary" : "secondary"
+                                onClicked: DesktopCtrl.setSelectedPanelPosition("top")
+                            }
+                            PFButton {
+                                Layout.fillWidth: true
+                                text: "Bottom"
+                                size: "sm"
+                                variant: DesktopCtrl.selectedPanelPosition === "bottom" ? "primary" : "secondary"
+                                onClicked: DesktopCtrl.setSelectedPanelPosition("bottom")
+                            }
+                            PFButton {
+                                Layout.fillWidth: true
+                                text: "Left"
+                                size: "sm"
+                                variant: DesktopCtrl.selectedPanelPosition === "left" ? "primary" : "secondary"
+                                onClicked: DesktopCtrl.setSelectedPanelPosition("left")
+                            }
+                            PFButton {
+                                Layout.fillWidth: true
+                                text: "Right"
+                                size: "sm"
+                                variant: DesktopCtrl.selectedPanelPosition === "right" ? "primary" : "secondary"
+                                onClicked: DesktopCtrl.setSelectedPanelPosition("right")
+                            }
+                        }
+                    }
+
+                    // 2. Thickness
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spaceXs
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text { text: "Panel Thickness"; font.pixelSize: Theme.fontSizeXs; font.weight: Font.DemiBold; color: Theme.textSecondary }
+                            Item { Layout.fillWidth: true }
+                            Text { text: DesktopCtrl.selectedPanelThickness + " px"; font.family: Theme.fontMono; font.pixelSize: Theme.fontSizeXs; font.weight: Font.Bold; color: Theme.accentLight }
+                        }
+
+                        Slider {
+                            Layout.fillWidth: true
+                            from: 16
+                            to: 128
+                            stepSize: 2
+                            value: DesktopCtrl.selectedPanelThickness
+                            onMoved: DesktopCtrl.setSelectedPanelThickness(Math.round(value))
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text { text: "16 px (Min)"; font.pixelSize: 9; color: Theme.textMuted }
+                            Item { Layout.fillWidth: true }
+                            Text { text: "128 px (Max)"; font.pixelSize: 9; color: Theme.textMuted }
+                        }
+                    }
+
+                    // 3. Visibility Mode
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spaceXs
+
+                        RowLayout {
+                            Text { text: "Visibility Mode"; font.pixelSize: Theme.fontSizeXs; font.weight: Font.DemiBold; color: Theme.textSecondary }
+                            Item { Layout.fillWidth: true }
+                            Text {
+                                text: DesktopCtrl.selectedPanelVisibility.replace("_", " ")
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.fontSizeXs
+                                font.weight: Font.Bold
+                                color: Theme.accentLight
+                            }
+                        }
+
+                        GridLayout {
+                            columns: 2
+                            Layout.fillWidth: true
+                            columnSpacing: 6
+                            rowSpacing: 6
+
+                            PFButton {
+                                Layout.fillWidth: true
+                                text: "Always Visible"
+                                size: "sm"
+                                variant: DesktopCtrl.selectedPanelVisibility === "always_visible" ? "primary" : "secondary"
+                                onClicked: DesktopCtrl.setSelectedPanelVisibility("always_visible")
+                            }
+                            PFButton {
+                                Layout.fillWidth: true
+                                text: "Auto-Hide"
+                                size: "sm"
+                                variant: DesktopCtrl.selectedPanelVisibility === "auto_hide" ? "primary" : "secondary"
+                                onClicked: DesktopCtrl.setSelectedPanelVisibility("auto_hide")
+                            }
+                            PFButton {
+                                Layout.fillWidth: true
+                                text: "Dodge Windows"
+                                size: "sm"
+                                variant: DesktopCtrl.selectedPanelVisibility === "dodge_windows" ? "primary" : "secondary"
+                                onClicked: DesktopCtrl.setSelectedPanelVisibility("dodge_windows")
+                            }
+                            PFButton {
+                                Layout.fillWidth: true
+                                text: "Windows Below"
+                                size: "sm"
+                                variant: DesktopCtrl.selectedPanelVisibility === "windows_go_below" ? "primary" : "secondary"
+                                onClicked: DesktopCtrl.setSelectedPanelVisibility("windows_go_below")
+                            }
+                        }
+                    }
+                }
+
+                // Live Diff readout for this panel
+                Rectangle {
+                    visible: DesktopCtrl.selectedPanelHasChanges
+                    Layout.fillWidth: true
+                    implicitHeight: panelDiffRow.implicitHeight + 16
+                    radius: Theme.radiusSm
+                    color: Qt.rgba(0.08, 0.72, 0.65, 0.08)
+                    border.color: Qt.rgba(0.08, 0.72, 0.65, 0.25)
+                    border.width: 1
+
+                    RowLayout {
+                        id: panelDiffRow
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: Theme.spaceMd
+
+                        Text { text: "Δ"; font.pixelSize: 14; font.weight: Font.Bold; color: Theme.accentLight }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "Pending Changes for Selected Panel:"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeXs
+                                font.weight: Font.DemiBold
+                                color: Theme.accentLight
+                            }
+                            Text {
+                                text: "Current: " + (DesktopCtrl.selectedPanelInfo.position || "top") + " • " + (DesktopCtrl.selectedPanelInfo.thickness || 32) + "px • " + (DesktopCtrl.selectedPanelInfo.visibility || "always_visible") +
+                                      "  ➔  Draft: " + DesktopCtrl.selectedPanelPosition + " • " + DesktopCtrl.selectedPanelThickness + "px • " + DesktopCtrl.selectedPanelVisibility
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.fontSizeXs
+                                color: Theme.textPrimary
+                            }
+                        }
+
+                        PFButton {
+                            text: "Review & Apply"
+                            iconText: "✓"
+                            size: "sm"
+                            variant: "primary"
+                            onClicked: DesktopCtrl.requestApplyDraft()
+                        }
+                    }
+                }
+            }
+        }
+
         // Workbench Controls: 2-Column Responsive Layout
         GridLayout {
             Layout.fillWidth: true
@@ -1508,17 +1849,26 @@ Item {
                         anchors.margins: 10
                         spacing: 4
 
-                        Text {
-                            text: AppCtrl.safeMode ? "Safe Mode Simulation:" : "Live Desktop Configuration Modification:"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeSm
-                            font.weight: Font.DemiBold
-                            color: AppCtrl.safeMode ? Theme.accentLight : Theme.warning
+                        RowLayout {
+                            spacing: Theme.spaceSm
+                            Text {
+                                text: AppCtrl.safeMode ? "Safe Mode Simulation:" : "Live Desktop Configuration Modification:"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSm
+                                font.weight: Font.DemiBold
+                                color: AppCtrl.safeMode ? Theme.accentLight : Theme.warning
+                            }
+                            PFBadge {
+                                text: DesktopCtrl.isLiveEditingSupported ? "Live D-Bus Enabled" : "Session Reload Only"
+                                variant: DesktopCtrl.isLiveEditingSupported ? "accent" : "neutral"
+                                size: "xs"
+                            }
                         }
+
                         Text {
                             text: AppCtrl.safeMode
                                 ? "Safe Mode is active. A simulated dry-run will create a test snapshot and generate unified diffs without modifying your live configuration."
-                                : "A verified cryptographic snapshot will be created before modifying any files. Supported panel position, thickness, and visibility keys will be applied. Visual changes take effect on desktop refresh or next login (plasmashell will NOT be terminated)."
+                                : "A verified cryptographic SHA256 snapshot will be captured before modifying files. Panel position, thickness, and visibility will be applied to disk and live via Plasma 6 D-Bus (qdbus6 evaluateScript). Verification confirms both on-disk and live D-Bus properties. On any verification failure, changes are rolled back automatically. Plasmashell will NOT be terminated."
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeXs
                             color: Theme.textSecondary
@@ -1558,7 +1908,7 @@ Item {
                         border.color: Theme.borderSubtle
                         border.width: 1
                         Layout.fillWidth: true
-                        Text { anchors.centerIn: parent; text: "3. Safe Write"; font.pixelSize: 10; font.weight: Font.DemiBold; color: Theme.textMuted }
+                        Text { anchors.centerIn: parent; text: "3. Live & Disk Apply"; font.pixelSize: 10; font.weight: Font.DemiBold; color: Theme.textMuted }
                     }
                     Rectangle {
                         height: 22
@@ -1597,10 +1947,18 @@ Item {
 
                 Item { Layout.fillHeight: true }
 
-                // Actions
+                // Actions & Loading Status
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: Theme.spaceMd
+
+                    Text {
+                        visible: DesktopCtrl.isApplying
+                        text: "Applying transactionally..."
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSm
+                        color: Theme.accentLight
+                    }
 
                     Item { Layout.fillWidth: true }
 
@@ -1608,17 +1966,19 @@ Item {
                         text: "Cancel"
                         variant: "secondary"
                         size: "md"
+                        enabled: !DesktopCtrl.isApplying
                         onClicked: DesktopCtrl.cancelApply()
                     }
 
-                        PFButton {
-                            text: AppCtrl.safeMode ? "Confirm Simulation" : "Apply Layout to KDE"
-                            iconText: AppCtrl.safeMode ? "🛡" : "✓"
-                            variant: "primary"
-                            size: "md"
-                            onClicked: DesktopCtrl.confirmApplyDraft()
-                        }
+                    PFButton {
+                        text: DesktopCtrl.isApplying ? "Applying..." : (AppCtrl.safeMode ? "Confirm Simulation" : "Apply Layout to KDE")
+                        iconText: DesktopCtrl.isApplying ? "⏳" : (AppCtrl.safeMode ? "🛡" : "✓")
+                        variant: "primary"
+                        size: "md"
+                        enabled: !DesktopCtrl.isApplying
+                        onClicked: DesktopCtrl.confirmApplyDraft()
                     }
+                }
                 }
             }
         }
