@@ -53,6 +53,7 @@ class DesktopController(QObject):
     confirmDialogVisibilityChanged = Signal(bool)
     applyFinished = Signal(bool, str, bool)  # success, message, is_dry_run
     restoreFinished = Signal(bool, str)
+    isApplyingChanged = Signal(bool)
 
     # Live inspection signals
     inspectionStateChanged = Signal()
@@ -190,10 +191,20 @@ class DesktopController(QObject):
         self._last_inspection_time = self._format_timestamp(state.timestamp)
         self._is_inspecting = False
 
-        if not self._selected_panel_id and state.panels:
-            self._selected_panel_id = state.panels[0].containment_id or state.panels[0].id
-            self._selected_panel_index = 0
+        panel_ids = [p.containment_id or p.id for p in state.panels]
+        if self._selected_panel_id not in panel_ids:
+            if state.panels:
+                self._selected_panel_id = state.panels[0].containment_id or state.panels[0].id
+                self._selected_panel_index = 0
+            else:
+                self._selected_panel_id = ""
+                self._selected_panel_index = 0
             self.selectedPanelChanged.emit()
+        else:
+            new_idx = panel_ids.index(self._selected_panel_id)
+            if self._selected_panel_index != new_idx:
+                self._selected_panel_index = new_idx
+                self.selectedPanelChanged.emit()
 
         config_path = None
         if hasattr(self._applier, "source_config_dir") and self._applier.source_config_dir:
@@ -386,7 +397,7 @@ class DesktopController(QObject):
     def showConfirmDialog(self) -> bool:
         return self._show_confirm_dialog
 
-    @Property(bool, notify=applyFinished)
+    @Property(bool, notify=isApplyingChanged)
     def isApplying(self) -> bool:
         return self._is_applying
 
@@ -812,15 +823,22 @@ class DesktopController(QObject):
     @Slot()
     def confirmApplyDraft(self) -> None:
         """Execute transactional apply of layout draft."""
+        if self._is_applying:
+            return
+
         self._show_confirm_dialog = False
         self.confirmDialogVisibilityChanged.emit(False)
 
         self._is_applying = True
-        config = get_config()
-        self._applier.safe_mode = config.safe_mode
+        self.isApplyingChanged.emit(True)
+        try:
+            config = get_config()
+            self._applier.safe_mode = config.safe_mode
 
-        res: TransactionResult = self._applier.apply_layout(self._draft_layout)
-        self._is_applying = False
+            res: TransactionResult = self._applier.apply_layout(self._draft_layout)
+        finally:
+            self._is_applying = False
+            self.isApplyingChanged.emit(False)
 
         if res.success and not res.is_dry_run:
             self._last_backup_id = res.backup_id

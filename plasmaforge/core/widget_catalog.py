@@ -280,7 +280,7 @@ class WidgetCatalogService:
         # 1. User plasmoids in ~/.local/share/plasma/plasmoids
         if self.user_plasmoids_dir.is_dir():
             for entry in self.user_plasmoids_dir.iterdir():
-                if entry.is_dir():
+                if entry.is_dir() and not entry.name.startswith("."):
                     info = self._inspect_plasmoid_directory(entry, is_user=True)
                     if info:
                         widgets_by_id[info.plugin_id] = info
@@ -288,7 +288,7 @@ class WidgetCatalogService:
         # 2. System QML plasmoids in /usr/share/plasma/plasmoids
         if self.system_plasmoids_dir.is_dir():
             for entry in self.system_plasmoids_dir.iterdir():
-                if entry.is_dir():
+                if entry.is_dir() and not entry.name.startswith("."):
                     info = self._inspect_plasmoid_directory(entry, is_user=False)
                     if info and info.plugin_id not in widgets_by_id:
                         widgets_by_id[info.plugin_id] = info

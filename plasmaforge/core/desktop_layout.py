@@ -10,7 +10,7 @@ import subprocess
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from plasmaforge.core.backup_manager import BackupManager
 from plasmaforge.core.kde_panel_editor import KdePanelLiveEditor
@@ -415,6 +415,7 @@ class DesktopLayoutApplier:
 
         live_revert_states: Dict[str, Dict[str, Any]] = {}
         applied_live_containments: List[str] = []
+        live_added_widgets: List[Tuple[str, int, str]] = []
 
         def apply_step() -> tuple[bool, str]:
             try:
@@ -491,7 +492,9 @@ class DesktopLayoutApplier:
                                 a_clean = applet.replace("org.kde.plasma.", "").replace("org.kde.", "")
                                 if a_clean not in live_types:
                                     ok_w, new_aid, w_msg = self.widget_placer.add_widget(cid, applet)
-                                    if ok_w and new_aid:
+                                    if not ok_w:
+                                        return False, f"Failed to place widget '{applet}' on panel #{cid}: {w_msg}"
+                                    if new_aid:
                                         live_added_widgets.append((cid, new_aid, applet))
 
                     if applied_live_containments or live_added_widgets:
@@ -506,8 +509,6 @@ class DesktopLayoutApplier:
                 )
             except Exception as e:
                 return False, f"Failed to write layout configuration: {e}"
-
-        live_added_widgets: List[Tuple[str, int, str]] = []
 
         def verify_step() -> tuple[bool, str]:
             if not config_file.is_file():

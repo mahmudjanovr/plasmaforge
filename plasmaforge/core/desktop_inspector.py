@@ -14,6 +14,7 @@ Guarantees:
 
 from __future__ import annotations
 
+from collections import Counter
 import configparser
 import datetime
 import json
@@ -884,13 +885,24 @@ class DesktopChangeAnalyzer:
 
         # 8. Top Panel Applets
         if cur_top_applets != new_top_applets and (cur_top_applets or new_top_applets):
-            added = set(new_top_applets) - set(cur_top_applets)
-            removed = set(cur_top_applets) - set(new_top_applets)
+            cur_counts = Counter(cur_top_applets)
+            new_counts = Counter(new_top_applets)
+            added_top = []
+            for applet, count in new_counts.items():
+                diff = count - cur_counts.get(applet, 0)
+                if diff > 0:
+                    added_top.extend([applet] * diff)
+            removed_top = []
+            for applet, count in cur_counts.items():
+                diff = count - new_counts.get(applet, 0)
+                if diff > 0:
+                    removed_top.extend([applet] * diff)
+
             parts = []
-            if added:
-                parts.append(f"Add {', '.join(sorted(added))}")
-            if removed:
-                parts.append(f"Remove {', '.join(sorted(removed))}")
+            if added_top:
+                parts.append(f"Add {', '.join(sorted(set(added_top)))}")
+            if removed_top:
+                parts.append(f"Remove {', '.join(sorted(set(removed_top)))}")
             desc = "; ".join(parts) or "Reorder applets in top panel"
             changes.append(
                 ProposedChange(
@@ -904,13 +916,24 @@ class DesktopChangeAnalyzer:
 
         # 9. Dock Applets
         if cur_dock_applets != new_dock_applets and (cur_dock_applets or new_dock_applets):
-            added = set(new_dock_applets) - set(cur_dock_applets)
-            removed = set(cur_dock_applets) - set(new_dock_applets)
+            cur_d_counts = Counter(cur_dock_applets)
+            new_d_counts = Counter(new_dock_applets)
+            added_dock = []
+            for applet, count in new_d_counts.items():
+                diff = count - cur_d_counts.get(applet, 0)
+                if diff > 0:
+                    added_dock.extend([applet] * diff)
+            removed_dock = []
+            for applet, count in cur_d_counts.items():
+                diff = count - new_d_counts.get(applet, 0)
+                if diff > 0:
+                    removed_dock.extend([applet] * diff)
+
             parts = []
-            if added:
-                parts.append(f"Add {', '.join(sorted(added))}")
-            if removed:
-                parts.append(f"Remove {', '.join(sorted(removed))}")
+            if added_dock:
+                parts.append(f"Add {', '.join(sorted(set(added_dock)))}")
+            if removed_dock:
+                parts.append(f"Remove {', '.join(sorted(set(removed_dock)))}")
             desc = "; ".join(parts) or "Reorder applets in dock"
             changes.append(
                 ProposedChange(
