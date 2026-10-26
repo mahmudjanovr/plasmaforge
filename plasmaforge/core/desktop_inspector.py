@@ -738,14 +738,18 @@ class DesktopChangeAnalyzer:
             cur_dock_pos = live_bottom.position if live_bottom else "none"
             cur_dock_th = live_bottom.thickness if live_bottom else 48
             cur_dock_vis = live_bottom.visibility if live_bottom else "always_visible"
+            cur_top_applets = list(live_top.applets) if (live_top and hasattr(live_top, "applets")) else []
+            cur_dock_applets = list(live_bottom.applets) if (live_bottom and hasattr(live_bottom, "applets")) else []
             has_widgets = bool(current_state.desktop_widgets)
         elif hasattr(current_state, "top_panel") and hasattr(current_state, "dock"):
             cur_top_pos = current_state.top_panel.position
             cur_top_th = current_state.top_panel.thickness
             cur_top_vis = current_state.top_panel.visibility
+            cur_top_applets = list(getattr(current_state.top_panel, "applets", []))
             cur_dock_pos = current_state.dock.position
             cur_dock_th = current_state.dock.thickness
             cur_dock_vis = current_state.dock.visibility
+            cur_dock_applets = list(getattr(current_state.dock, "applets", []))
             has_widgets = bool(getattr(current_state, "show_widgets", False))
         elif isinstance(current_state, dict):
             c_top = current_state.get("top_panel", {})
@@ -753,13 +757,16 @@ class DesktopChangeAnalyzer:
             cur_top_pos = c_top.get("position", "top")
             cur_top_th = c_top.get("thickness", 32)
             cur_top_vis = c_top.get("visibility", "always_visible")
+            cur_top_applets = list(c_top.get("applets", []))
             cur_dock_pos = c_dock.get("position", "bottom")
             cur_dock_th = c_dock.get("thickness", 48)
             cur_dock_vis = c_dock.get("visibility", "always_visible")
+            cur_dock_applets = list(c_dock.get("applets", []))
             has_widgets = bool(current_state.get("show_widgets", False))
         else:
             cur_top_pos, cur_top_th, cur_top_vis = "top", 32, "always_visible"
             cur_dock_pos, cur_dock_th, cur_dock_vis = "bottom", 48, "always_visible"
+            cur_top_applets, cur_dock_applets = [], []
             has_widgets = False
 
         # Extract draft state values
@@ -767,9 +774,11 @@ class DesktopChangeAnalyzer:
             new_top_pos = draft_state.top_panel.position
             new_top_th = draft_state.top_panel.thickness
             new_top_vis = draft_state.top_panel.visibility
+            new_top_applets = list(getattr(draft_state.top_panel, "applets", []))
             new_dock_pos = draft_state.dock.position
             new_dock_th = draft_state.dock.thickness
             new_dock_vis = draft_state.dock.visibility
+            new_dock_applets = list(getattr(draft_state.dock, "applets", []))
             draft_widgets = bool(getattr(draft_state, "show_widgets", False))
         elif isinstance(draft_state, dict):
             d_top = draft_state.get("top_panel", {})
@@ -777,13 +786,16 @@ class DesktopChangeAnalyzer:
             new_top_pos = d_top.get("position", "top")
             new_top_th = d_top.get("thickness", 32)
             new_top_vis = d_top.get("visibility", "always_visible")
+            new_top_applets = list(d_top.get("applets", []))
             new_dock_pos = d_dock.get("position", "bottom")
             new_dock_th = d_dock.get("thickness", 48)
             new_dock_vis = d_dock.get("visibility", "always_visible")
+            new_dock_applets = list(d_dock.get("applets", []))
             draft_widgets = bool(draft_state.get("show_widgets", False))
         else:
             new_top_pos, new_top_th, new_top_vis = "top", 32, "always_visible"
             new_dock_pos, new_dock_th, new_dock_vis = "bottom", 48, "always_visible"
+            new_top_applets, new_dock_applets = [], []
             draft_widgets = False
 
         # 1. Top Panel Position
@@ -867,6 +879,46 @@ class DesktopChangeAnalyzer:
                     proposed_value="Enabled" if draft_widgets else "Disabled",
                     is_supported_live=False,
                     description="Widget layout orchestration is simulated in Desktop Builder preview.",
+                )
+            )
+
+        # 8. Top Panel Applets
+        if cur_top_applets != new_top_applets and (cur_top_applets or new_top_applets):
+            added = set(new_top_applets) - set(cur_top_applets)
+            removed = set(cur_top_applets) - set(new_top_applets)
+            parts = []
+            if added:
+                parts.append(f"Add {', '.join(sorted(added))}")
+            if removed:
+                parts.append(f"Remove {', '.join(sorted(removed))}")
+            desc = "; ".join(parts) or "Reorder applets in top panel"
+            changes.append(
+                ProposedChange(
+                    component="Top Panel Applets",
+                    current_value=f"{len(cur_top_applets)} applet(s)",
+                    proposed_value=f"{len(new_top_applets)} applet(s)",
+                    is_supported_live=True,
+                    description=desc,
+                )
+            )
+
+        # 9. Dock Applets
+        if cur_dock_applets != new_dock_applets and (cur_dock_applets or new_dock_applets):
+            added = set(new_dock_applets) - set(cur_dock_applets)
+            removed = set(cur_dock_applets) - set(new_dock_applets)
+            parts = []
+            if added:
+                parts.append(f"Add {', '.join(sorted(added))}")
+            if removed:
+                parts.append(f"Remove {', '.join(sorted(removed))}")
+            desc = "; ".join(parts) or "Reorder applets in dock"
+            changes.append(
+                ProposedChange(
+                    component="Dock Applets",
+                    current_value=f"{len(cur_dock_applets)} applet(s)",
+                    proposed_value=f"{len(new_dock_applets)} applet(s)",
+                    is_supported_live=True,
+                    description=desc,
                 )
             )
 

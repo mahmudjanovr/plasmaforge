@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from plasmaforge.core.backup_manager import BackupManager
 from plasmaforge.core.kde_panel_editor import KdePanelLiveEditor
+from plasmaforge.core.kde_widget_placer import KdeWidgetPlacer
 from plasmaforge.core.transaction import (
     ApplyOperation,
     TransactionalSafetyEngine,
@@ -77,11 +78,11 @@ NAME_TO_VISIBILITY: Dict[str, int] = {
 class PanelConfig:
     """Configuration for a specific KDE Plasma panel or dock."""
 
-    position: str = "bottom"  # top, bottom, left, right, none
-    thickness: int = 36       # height/width in pixels
-    visibility: str = "always_visible"  # always_visible, auto_hide, dodge_windows
+    position: str = "bottom"  
+    thickness: int = 36       
+    visibility: str = "always_visible"  
     is_dock: bool = False
-    icon_size: int = 40       # icon size in px (for docks/tasks)
+    icon_size: int = 40       
     applets: List[str] = field(default_factory=list)
     containment_id: Optional[str] = None
     is_detected: bool = False
@@ -128,9 +129,10 @@ class DesktopLayout:
 
     id: str
     name: str
-    description: str
+    description: str = ""
     top_panel: PanelConfig = field(default_factory=lambda: PanelConfig(position="top", thickness=32))
     dock: PanelConfig = field(default_factory=lambda: PanelConfig(position="bottom", thickness=48, is_dock=True))
+    desktop_widgets: List[str] = field(default_factory=list)
     show_widgets: bool = False
     is_detected: bool = False
     is_preset: bool = False
@@ -150,6 +152,7 @@ class DesktopLayout:
             "description": self.description,
             "top_panel": self.top_panel.to_dict(),
             "dock": self.dock.to_dict(),
+            "desktop_widgets": list(self.desktop_widgets),
             "show_widgets": self.show_widgets,
             "is_detected": self.is_detected,
             "is_preset": self.is_preset,
@@ -163,6 +166,7 @@ class DesktopLayout:
             description=str(data.get("description", "")),
             top_panel=PanelConfig.from_dict(data.get("top_panel", {})),
             dock=PanelConfig.from_dict(data.get("dock", {})),
+            desktop_widgets=[str(w) for w in data.get("desktop_widgets", [])],
             show_widgets=bool(data.get("show_widgets", False)),
             is_detected=bool(data.get("is_detected", False)),
             is_preset=bool(data.get("is_preset", False)),
@@ -170,72 +174,9 @@ class DesktopLayout:
 
 
 def get_layout_presets() -> List[DesktopLayout]:
-    """sensible curated layout presets."""
-    return [
-        DesktopLayout(
-            id="classic_kde",
-            name="Classic KDE",
-            description="Conventional full-width bottom panel containing app launcher, task manager, and system tray.",
-            top_panel=PanelConfig(
-                position="none",
-                thickness=32,
-                visibility="always_visible",
-                applets=[],
-            ),
-            dock=PanelConfig(
-                position="bottom",
-                thickness=44,
-                visibility="always_visible",
-                is_dock=False,
-                icon_size=36,
-                applets=["kickoff", "taskmanager", "systemtray", "digitalclock"],
-            ),
-            show_widgets=False,
-            is_preset=True,
-        ),
-        DesktopLayout(
-            id="nothing_inspired",
-            name="Nothing-Inspired",
-            description="Minimalist dual arrangement: sleek top status bar and centered floating bottom dock.",
-            top_panel=PanelConfig(
-                position="top",
-                thickness=32,
-                visibility="always_visible",
-                applets=["kickoff", "appmenu", "digitalclock", "systemtray"],
-            ),
-            dock=PanelConfig(
-                position="bottom",
-                thickness=52,
-                visibility="dodge_windows",
-                is_dock=True,
-                icon_size=44,
-                applets=["icontasks"],
-            ),
-            show_widgets=True,
-            is_preset=True,
-        ),
-        DesktopLayout(
-            id="clean_minimal",
-            name="Clean Minimal",
-            description="Distraction-free auto-hiding layout maximizing active workspace real estate.",
-            top_panel=PanelConfig(
-                position="top",
-                thickness=30,
-                visibility="auto_hide",
-                applets=["systemtray", "digitalclock"],
-            ),
-            dock=PanelConfig(
-                position="bottom",
-                thickness=46,
-                visibility="auto_hide",
-                is_dock=True,
-                icon_size=38,
-                applets=["icontasks"],
-            ),
-            show_widgets=False,
-            is_preset=True,
-        ),
-    ]
+    """Return sensible curated layout presets."""
+    from plasmaforge.core.layout_presets import get_curated_layout_presets
+    return [p.to_desktop_layout() for p in get_curated_layout_presets()]
 
 
 def detect_desktop_layout(config_path: Optional[Path] = None) -> DesktopLayout:
@@ -356,6 +297,7 @@ class DesktopLayoutApplier:
         safe_mode: bool = True,
         source_config_dir: Optional[Path] = None,
         live_editor: Optional[KdePanelLiveEditor] = None,
+        widget_placer: Optional[KdeWidgetPlacer] = None,
     ) -> None:
         self.backup_manager = backup_manager or BackupManager()
         self.safe_mode = safe_mode
@@ -366,6 +308,7 @@ class DesktopLayoutApplier:
             source_config_dir=self.source_config_dir,
         )
         self.live_editor = live_editor or KdePanelLiveEditor()
+        self.widget_placer = widget_placer or KdeWidgetPlacer(editor=self.live_editor)
 
     def generate_diff_preview(self, target_layout: DesktopLayout) -> str:
         """Generate unified diff showing what ~/.config/plasma-org.kde.plasma.desktop-appletsrc would change."""
@@ -540,10 +483,21 @@ class DesktopLayoutApplier:
                         else:
                             return False, f"Live application failed on panel #{cid}: {msg}"
 
-                    if applied_live_containments:
+                        # Check for staged widget additions
+                        if p_cfg.applets and self.widget_placer.is_supported():
+                            live_ws = self.widget_placer.get_containment_widgets(cid)
+                            live_types = {w.get("type", "").replace("org.kde.plasma.", "").replace("org.kde.", "") for w in live_ws}
+                            for applet in p_cfg.applets:
+                                a_clean = applet.replace("org.kde.plasma.", "").replace("org.kde.", "")
+                                if a_clean not in live_types:
+                                    ok_w, new_aid, w_msg = self.widget_placer.add_widget(cid, applet)
+                                    if ok_w and new_aid:
+                                        live_added_widgets.append((cid, new_aid, applet))
+
+                    if applied_live_containments or live_added_widgets:
                         return (
                             True,
-                            f"Applied live via D-Bus and saved to disk (panels: {', '.join(applied_live_containments)}).",
+                            f"Applied live via D-Bus and saved to disk (panels: {', '.join(applied_live_containments)}, added widgets: {len(live_added_widgets)}).",
                         )
 
                 return (
@@ -552,6 +506,8 @@ class DesktopLayoutApplier:
                 )
             except Exception as e:
                 return False, f"Failed to write layout configuration: {e}"
+
+        live_added_widgets: List[Tuple[str, int, str]] = []
 
         def verify_step() -> tuple[bool, str]:
             if not config_file.is_file():
@@ -586,6 +542,12 @@ class DesktopLayoutApplier:
                         if not ok_v:
                             return False, f"Live verification failed: {v_msg}"
 
+                # 3. Verify live placed widgets
+                for cid, aid, plugin_id in live_added_widgets:
+                    ok_pw, pw_msg = self.widget_placer.verify_widget_presence(cid, plugin_id, should_be_present=True)
+                    if not ok_pw:
+                        return False, f"Live widget verification failed on panel #{cid}: {pw_msg}"
+
                 return True, "Layout configuration verified on disk and live desktop."
             except Exception as e:
                 return False, f"Verification error: {e}"
@@ -608,9 +570,13 @@ class DesktopLayoutApplier:
             force_safe_mode=force_safe_mode,
         )
 
-        # On failure, revert live D-Bus state if any panels were modified live
-        if not res.success and live_revert_states:
-            for cid, prev_state in live_revert_states.items():
-                self.live_editor.revert_panel_properties(cid, prev_state)
+        # On failure, revert live D-Bus state and remove added widgets if any were modified live
+        if not res.success:
+            if live_revert_states:
+                for cid, prev_state in live_revert_states.items():
+                    self.live_editor.revert_panel_properties(cid, prev_state)
+            if live_added_widgets:
+                for cid, aid, _ in live_added_widgets:
+                    self.widget_placer.remove_widget(cid, aid)
 
         return res

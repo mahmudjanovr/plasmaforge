@@ -8,6 +8,30 @@ import plasmaforge.qml.components 1.0
 Item {
     id: desktopBuilderRoot
 
+    property string widgetSearchQuery: ""
+    property string selectedCategory: "All"
+    property string selectedTargetFilter: "all"
+    property bool showSavePresetDialog: false
+
+    function getFilteredWidgets() {
+        var list = DesktopCtrl.installedWidgets
+        var q = widgetSearchQuery.toLowerCase().trim()
+        var cat = selectedCategory
+        var target = selectedTargetFilter
+        return list.filter(function(w) {
+            if (cat !== "All" && w.category !== cat) return false
+            if (target === "panel" && (!w.suitable_for || w.suitable_for.indexOf("panel") === -1)) return false
+            if (target === "desktop" && (!w.suitable_for || w.suitable_for.indexOf("desktop") === -1)) return false
+            if (q) {
+                var name = (w.name || "").toLowerCase()
+                var desc = (w.description || "").toLowerCase()
+                var pid = (w.plugin_id || "").toLowerCase()
+                return name.indexOf(q) !== -1 || desc.indexOf(q) !== -1 || pid.indexOf(q) !== -1
+            }
+            return true
+        })
+    }
+
     Connections {
         target: DesktopCtrl
         function onApplyFinished(success, message, isDryRun) {
@@ -985,12 +1009,23 @@ Item {
             Layout.fillWidth: true
             spacing: Theme.spaceSm
 
-            Text {
-                text: "LAYOUT PRESETS"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeXs
-                font.weight: Font.DemiBold
-                color: Theme.textMuted
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: "LAYOUT PRESETS"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeXs
+                    font.weight: Font.DemiBold
+                    color: Theme.textMuted
+                    Layout.fillWidth: true
+                }
+                PFButton {
+                    text: "Save Draft as Preset"
+                    iconText: "💾"
+                    variant: "secondary"
+                    size: "sm"
+                    onClicked: desktopBuilderRoot.showSavePresetDialog = true
+                }
             }
 
             GridLayout {
@@ -1003,8 +1038,9 @@ Item {
                     model: DesktopCtrl.presets
 
                     delegate: PFCard {
+                        readonly property var missingWidgets: DesktopCtrl.checkPresetMissingWidgets(modelData.id)
                         Layout.fillWidth: true
-                        implicitHeight: 108
+                        implicitHeight: 116
                         color: DesktopCtrl.selectedPresetId === modelData.id ? Qt.rgba(0.08, 0.72, 0.65, 0.08) : Theme.surface
                         border.color: DesktopCtrl.selectedPresetId === modelData.id ? Theme.accent : Theme.borderSubtle
 
@@ -1031,10 +1067,42 @@ Item {
                                     font.weight: Font.DemiBold
                                     color: DesktopCtrl.selectedPresetId === modelData.id ? Theme.accentLight : Theme.textPrimary
                                     Layout.fillWidth: true
+                                    elide: Text.ElideRight
                                 }
                                 PFBadge {
-                                    text: modelData.id === "nothing_inspired" ? "Dual Panel" : (modelData.id === "classic_kde" ? "Conventional" : "Minimal")
-                                    variant: DesktopCtrl.selectedPresetId === modelData.id ? "accent" : "neutral"
+                                    text: modelData.is_builtin ? (modelData.id === "nothing_inspired" ? "Dual Panel" : (modelData.id === "classic_kde" ? "Conventional" : (modelData.id === "dual_status_dock" ? "Status & Dock" : "Minimal"))) : "Custom"
+                                    variant: DesktopCtrl.selectedPresetId === modelData.id ? "accent" : (modelData.is_builtin ? "neutral" : "success")
+                                    size: "xs"
+                                }
+                                Rectangle {
+                                    visible: !modelData.is_builtin
+                                    width: 18
+                                    height: 18
+                                    radius: 9
+                                    color: Qt.rgba(0.94, 0.27, 0.27, 0.15)
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "✕"
+                                        font.pixelSize: 9
+                                        color: "#f87171"
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            DesktopCtrl.deleteCustomPreset(modelData.id)
+                                            AppCtrl.showToast("Deleted custom preset: " + modelData.name, "info")
+                                        }
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                visible: missingWidgets.length > 0
+                                spacing: 4
+                                PFBadge {
+                                    text: "Missing " + missingWidgets.length + " plasmoid(s)"
+                                    variant: "warning"
                                     size: "xs"
                                 }
                             }
@@ -1347,6 +1415,123 @@ Item {
                     }
                 }
 
+                // Panel Applets Strip
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text {
+                            text: "Panel Applets (" + DesktopCtrl.selectedPanelApplets.length + "):"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            font.weight: Font.DemiBold
+                            color: Theme.textSecondary
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: "Add widgets from catalog below"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textMuted
+                        }
+                    }
+
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: Theme.spaceSm
+
+                        Repeater {
+                            model: DesktopCtrl.selectedPanelApplets
+
+                            delegate: Rectangle {
+                                height: 32
+                                implicitWidth: appletChipRow.implicitWidth + 20
+                                radius: Theme.radiusSm
+                                color: Qt.rgba(1, 1, 1, 0.04)
+                                border.color: Theme.borderSubtle
+                                border.width: 1
+
+                                RowLayout {
+                                    id: appletChipRow
+                                    anchors.centerIn: parent
+                                    spacing: 6
+
+                                    Text {
+                                        text: "#" + (index + 1)
+                                        font.family: Theme.fontMono
+                                        font.pixelSize: 10
+                                        font.weight: Font.Bold
+                                        color: Theme.accentLight
+                                    }
+
+                                    Text {
+                                        text: modelData.replace("org.kde.plasma.", "").replace("org.kde.", "")
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeXs
+                                        font.weight: Font.DemiBold
+                                        color: Theme.textPrimary
+                                    }
+
+                                    // Move Left / Up button
+                                    Text {
+                                        visible: index > 0
+                                        text: "◀"
+                                        font.pixelSize: 10
+                                        color: Theme.textMuted
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: DesktopCtrl.moveAppletInDraft(DesktopCtrl.selectedPanelId, index, index - 1)
+                                        }
+                                    }
+
+                                    // Move Right / Down button
+                                    Text {
+                                        visible: index < DesktopCtrl.selectedPanelApplets.length - 1
+                                        text: "▶"
+                                        font.pixelSize: 10
+                                        color: Theme.textMuted
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: DesktopCtrl.moveAppletInDraft(DesktopCtrl.selectedPanelId, index, index + 1)
+                                        }
+                                    }
+
+                                    // Remove applet button
+                                    Rectangle {
+                                        width: 16
+                                        height: 16
+                                        radius: 8
+                                        color: Qt.rgba(0.94, 0.27, 0.27, 0.15)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "✕"
+                                            font.pixelSize: 9
+                                            color: "#f87171"
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: DesktopCtrl.removeAppletFromDraft(DesktopCtrl.selectedPanelId, index)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            visible: DesktopCtrl.selectedPanelApplets.length === 0
+                            text: "No applets currently staged on this panel. Use the catalog below to add applets."
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textMuted
+                        }
+                    }
+                }
+
                 // Live Diff readout for this panel
                 Rectangle {
                     visible: DesktopCtrl.selectedPanelHasChanges
@@ -1390,6 +1575,375 @@ Item {
                             size: "sm"
                             variant: "primary"
                             onClicked: DesktopCtrl.requestApplyDraft()
+                        }
+                    }
+                }
+            }
+        }
+
+        // Installed Widget Catalog & Layout Builder Card
+        PFCard {
+            Layout.fillWidth: true
+            implicitHeight: widgetCatalogCol.implicitHeight + (Theme.spaceLg * 2)
+
+            ColumnLayout {
+                id: widgetCatalogCol
+                anchors.fill: parent
+                anchors.margins: Theme.spaceLg
+                spacing: Theme.spaceMd
+
+                // Header
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceSm
+
+                    Rectangle {
+                        width: 28
+                        height: 28
+                        radius: Theme.radiusSm
+                        color: Qt.rgba(0.08, 0.72, 0.65, 0.15)
+                        border.color: Theme.accent
+                        border.width: 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: "🧩"
+                            font.pixelSize: 14
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        RowLayout {
+                            spacing: Theme.spaceSm
+                            Text {
+                                text: "INSTALLED WIDGET CATALOG"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeXs
+                                font.weight: Font.DemiBold
+                                color: Theme.accentLight
+                            }
+                            PFBadge {
+                                text: DesktopCtrl.installedWidgets.length + " Discovered"
+                                variant: "accent"
+                                size: "xs"
+                            }
+                            PFBadge {
+                                text: DesktopCtrl.isCatalogLoading ? "Scanning..." : "Read-Only Discovery"
+                                variant: DesktopCtrl.isCatalogLoading ? "warning" : "neutral"
+                                size: "xs"
+                            }
+                        }
+                        Text {
+                            text: "Discover verified Plasma 6 plasmoids & applets installed on this system and stage them into panels or desktop"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textMuted
+                        }
+                    }
+
+                    PFButton {
+                        text: DesktopCtrl.isCatalogLoading ? "Scanning..." : "Refresh Catalog"
+                        iconText: "⟳"
+                        variant: "secondary"
+                        size: "sm"
+                        enabled: !DesktopCtrl.isCatalogLoading
+                        onClicked: DesktopCtrl.loadWidgetCatalog()
+                    }
+                }
+
+                // Filter & Search Toolbar
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceSm
+
+                    // Search box
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 34
+                        radius: Theme.radiusSm
+                        color: Theme.surface
+                        border.color: searchWidgetField.activeFocus ? Theme.accent : Theme.borderSubtle
+                        border.width: 1
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 6
+
+                            Text {
+                                text: "🔍"
+                                font.pixelSize: 11
+                                color: Theme.textMuted
+                            }
+
+                            TextInput {
+                                id: searchWidgetField
+                                Layout.fillWidth: true
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSm
+                                color: Theme.textPrimary
+                                selectByMouse: true
+                                text: desktopBuilderRoot.widgetSearchQuery
+                                onTextChanged: desktopBuilderRoot.widgetSearchQuery = text
+
+                                Text {
+                                    visible: !searchWidgetField.text && !searchWidgetField.activeFocus
+                                    text: "Search installed widgets by name, ID, or description..."
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSm
+                                    color: Theme.textMuted
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+
+                            Text {
+                                visible: searchWidgetField.text.length > 0
+                                text: "✕"
+                                font.pixelSize: 11
+                                color: Theme.textMuted
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        searchWidgetField.text = ""
+                                        desktopBuilderRoot.widgetSearchQuery = ""
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Target Filter Toggle (All, Panel, Desktop)
+                    RowLayout {
+                        spacing: 4
+                        PFButton {
+                            text: "All"
+                            size: "sm"
+                            variant: desktopBuilderRoot.selectedTargetFilter === "all" ? "primary" : "secondary"
+                            onClicked: desktopBuilderRoot.selectedTargetFilter = "all"
+                        }
+                        PFButton {
+                            text: "Panel"
+                            size: "sm"
+                            variant: desktopBuilderRoot.selectedTargetFilter === "panel" ? "primary" : "secondary"
+                            onClicked: desktopBuilderRoot.selectedTargetFilter = "panel"
+                        }
+                        PFButton {
+                            text: "Desktop"
+                            size: "sm"
+                            variant: desktopBuilderRoot.selectedTargetFilter === "desktop" ? "primary" : "secondary"
+                            onClicked: desktopBuilderRoot.selectedTargetFilter = "desktop"
+                        }
+                    }
+                }
+
+                // Category Chips Strip
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Repeater {
+                        model: DesktopCtrl.widgetCategories
+
+                        delegate: Rectangle {
+                            readonly property bool isSelected: desktopBuilderRoot.selectedCategory === modelData
+                            height: 26
+                            implicitWidth: catRow.implicitWidth + 16
+                            radius: Theme.radiusSm
+                            color: isSelected ? Qt.rgba(0.08, 0.72, 0.65, 0.2) : Qt.rgba(1, 1, 1, 0.03)
+                            border.color: isSelected ? Theme.accent : Theme.borderSubtle
+                            border.width: 1
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: desktopBuilderRoot.selectedCategory = modelData
+                            }
+
+                            RowLayout {
+                                id: catRow
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Text {
+                                    text: modelData
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    font.weight: isSelected ? Font.DemiBold : Font.Normal
+                                    color: isSelected ? Theme.accentLight : Theme.textSecondary
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Theme.borderSubtle
+                }
+
+                // Widget List (Grid or Column)
+                GridLayout {
+                    id: widgetCatalogGrid
+                    Layout.fillWidth: true
+                    columns: desktopBuilderRoot.width > 860 ? 2 : 1
+                    columnSpacing: Theme.spaceMd
+                    rowSpacing: Theme.spaceMd
+
+                    readonly property var currentList: desktopBuilderRoot.getFilteredWidgets()
+
+                    Repeater {
+                        model: widgetCatalogGrid.currentList
+
+                        delegate: Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: widgetItemCol.implicitHeight + 20
+                            radius: Theme.radiusSm
+                            color: Theme.surface
+                            border.color: Theme.borderSubtle
+                            border.width: 1
+
+                            ColumnLayout {
+                                id: widgetItemCol
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 8
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: Theme.spaceSm
+
+                                    Rectangle {
+                                        width: 26
+                                        height: 26
+                                        radius: Theme.radiusSm
+                                        color: modelData.source === "user_installed" ? Qt.rgba(0.96, 0.62, 0.04, 0.15) : Qt.rgba(0.08, 0.72, 0.65, 0.12)
+                                        border.color: modelData.source === "user_installed" ? Theme.warning : Theme.borderSubtle
+                                        border.width: 1
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: modelData.name ? modelData.name.charAt(0).toUpperCase() : "W"
+                                            font.pixelSize: 12
+                                            font.weight: Font.Bold
+                                            color: modelData.source === "user_installed" ? Theme.warning : Theme.accentLight
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+
+                                        Text {
+                                            text: modelData.name
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: Theme.fontSizeSm
+                                            font.weight: Font.DemiBold
+                                            color: Theme.textPrimary
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Text {
+                                            text: modelData.plugin_id
+                                            font.family: Theme.fontMono
+                                            font.pixelSize: 10
+                                            color: Theme.textMuted
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+
+                                    PFBadge {
+                                        text: modelData.source === "user_installed" ? "User Plasmoid" : "System"
+                                        variant: modelData.source === "user_installed" ? "warning" : "neutral"
+                                        size: "xs"
+                                    }
+                                }
+
+                                Text {
+                                    text: modelData.description || "No description provided."
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeXs
+                                    color: Theme.textSecondary
+                                    wrapMode: Text.WordWrap
+                                    Layout.fillWidth: true
+                                    maximumLineCount: 2
+                                    elide: Text.ElideRight
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: Theme.spaceSm
+
+                                    PFBadge {
+                                        text: modelData.category || "Utilities"
+                                        variant: "neutral"
+                                        size: "xs"
+                                    }
+
+                                    Item { Layout.fillWidth: true }
+
+                                    PFButton {
+                                        text: "+ Add to Panel"
+                                        size: "xs"
+                                        variant: "secondary"
+                                        visible: Boolean(modelData.suitable_for && modelData.suitable_for.indexOf("panel") !== -1)
+                                        onClicked: {
+                                            DesktopCtrl.addAppletToDraft(DesktopCtrl.selectedPanelId, modelData.plugin_id)
+                                            AppCtrl.showToast("Added " + modelData.name + " to selected panel", "success")
+                                        }
+                                    }
+
+                                    PFButton {
+                                        text: "+ Add to Desktop"
+                                        size: "xs"
+                                        variant: "outline"
+                                        visible: Boolean(modelData.suitable_for && modelData.suitable_for.indexOf("desktop") !== -1)
+                                        onClicked: {
+                                            DesktopCtrl.addDesktopWidgetToDraft(modelData.plugin_id)
+                                            AppCtrl.showToast("Added " + modelData.name + " to desktop", "success")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Empty state if filtered results are empty
+                Rectangle {
+                    visible: widgetCatalogGrid.currentList.length === 0
+                    Layout.fillWidth: true
+                    height: 100
+                    radius: Theme.radiusSm
+                    color: Qt.rgba(1, 1, 1, 0.02)
+                    border.color: Theme.borderSubtle
+                    border.width: 1
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 6
+                        Text {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: DesktopCtrl.isCatalogLoading ? "Discovering installed widgets..." : "No widgets matched your search."
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSm
+                            color: Theme.textSecondary
+                        }
+                        PFButton {
+                            visible: !DesktopCtrl.isCatalogLoading && (desktopBuilderRoot.widgetSearchQuery.length > 0 || desktopBuilderRoot.selectedCategory !== "All")
+                            Layout.alignment: Qt.AlignHCenter
+                            text: "Reset Search Filters"
+                            size: "xs"
+                            variant: "secondary"
+                            onClicked: {
+                                searchWidgetField.text = ""
+                                desktopBuilderRoot.widgetSearchQuery = ""
+                                desktopBuilderRoot.selectedCategory = "All"
+                                desktopBuilderRoot.selectedTargetFilter = "all"
+                            }
                         }
                     }
                 }
@@ -1620,59 +2174,122 @@ Item {
         // Widgets & Simulation Toggle Card
         PFCard {
             Layout.fillWidth: true
-            implicitHeight: 84
+            implicitHeight: desktopWidgetsCardCol.implicitHeight + (Theme.spaceLg * 2)
 
-            RowLayout {
+            ColumnLayout {
+                id: desktopWidgetsCardCol
                 anchors.fill: parent
                 anchors.margins: Theme.spaceLg
                 spacing: Theme.spaceMd
 
-                Rectangle {
-                    width: 36
-                    height: 36
-                    radius: Theme.radiusMd
-                    color: Qt.rgba(0.08, 0.72, 0.65, 0.12)
-                    border.color: Theme.borderSubtle
-                    border.width: 1
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "🧩"
-                        font.pixelSize: 16
-                    }
-                }
-
-                ColumnLayout {
+                RowLayout {
                     Layout.fillWidth: true
-                    spacing: 2
-                    RowLayout {
-                        spacing: Theme.spaceSm
+                    spacing: Theme.spaceMd
+
+                    Rectangle {
+                        width: 36
+                        height: 36
+                        radius: Theme.radiusMd
+                        color: Qt.rgba(0.08, 0.72, 0.65, 0.12)
+                        border.color: Theme.borderSubtle
+                        border.width: 1
+
                         Text {
-                            text: "Desktop Widgets (Nothing-Inspired Clock & Stats)"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeSm
-                            font.weight: Font.DemiBold
-                            color: Theme.textPrimary
-                        }
-                        PFBadge {
-                            text: "Simulation Preview"
-                            variant: "neutral"
-                            size: "xs"
+                            anchors.centerIn: parent
+                            text: "🧩"
+                            font.pixelSize: 16
                         }
                     }
-                    Text {
-                        text: "Renders the Nothing OS typographic clock and system telemetry widget on the desktop canvas"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeXs
-                        color: Theme.textSecondary
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        RowLayout {
+                            spacing: Theme.spaceSm
+                            Text {
+                                text: "Desktop Widgets Layer (" + DesktopCtrl.desktopWidgets.length + " Staged)"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSm
+                                font.weight: Font.DemiBold
+                                color: Theme.textPrimary
+                            }
+                            PFBadge {
+                                text: "Freeform Coordinates Simulated"
+                                variant: "neutral"
+                                size: "xs"
+                            }
+                        }
+                        Text {
+                            text: "Renders Nothing-inspired clock, system telemetry, and custom plasmoids on the desktop canvas"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    PFButton {
+                        text: DesktopCtrl.showWidgets ? "Hide Widget Layer" : "Show Widget Layer"
+                        variant: DesktopCtrl.showWidgets ? "primary" : "secondary"
+                        size: "sm"
+                        onClicked: DesktopCtrl.setShowWidgets(!DesktopCtrl.showWidgets)
                     }
                 }
 
-                PFButton {
-                    text: DesktopCtrl.showWidgets ? "Hide Widget" : "Show Widget"
-                    variant: DesktopCtrl.showWidgets ? "primary" : "secondary"
-                    size: "sm"
-                    onClicked: DesktopCtrl.setShowWidgets(!DesktopCtrl.showWidgets)
+                // Staged desktop widgets chips
+                Flow {
+                    visible: DesktopCtrl.desktopWidgets.length > 0
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceSm
+
+                    Repeater {
+                        model: DesktopCtrl.desktopWidgets
+
+                        delegate: Rectangle {
+                            height: 30
+                            implicitWidth: dChipRow.implicitWidth + 18
+                            radius: Theme.radiusSm
+                            color: Qt.rgba(1, 1, 1, 0.04)
+                            border.color: Theme.borderSubtle
+                            border.width: 1
+
+                            RowLayout {
+                                id: dChipRow
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                Text {
+                                    text: "🧩"
+                                    font.pixelSize: 10
+                                }
+
+                                Text {
+                                    text: modelData.replace("org.kde.plasma.", "").replace("com.github.", "")
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeXs
+                                    font.weight: Font.DemiBold
+                                    color: Theme.textPrimary
+                                }
+
+                                Rectangle {
+                                    width: 16
+                                    height: 16
+                                    radius: 8
+                                    color: Qt.rgba(0.94, 0.27, 0.27, 0.15)
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "✕"
+                                        font.pixelSize: 9
+                                        color: "#f87171"
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: DesktopCtrl.removeDesktopWidgetFromDraft(index)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1979,6 +2596,203 @@ Item {
                         onClicked: DesktopCtrl.confirmApplyDraft()
                     }
                 }
+                }
+            }
+        }
+    }
+
+    // Save Preset Modal Overlay
+    Rectangle {
+        id: savePresetOverlay
+        visible: desktopBuilderRoot.showSavePresetDialog
+        anchors.fill: parent
+        color: Qt.rgba(0.04, 0.05, 0.07, 0.78)
+        z: 9999
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: desktopBuilderRoot.showSavePresetDialog = false
+        }
+
+        Rectangle {
+            id: savePresetModalCard
+            width: Math.min(desktopBuilderRoot.width - 48, 520)
+            implicitHeight: savePresetCol.implicitHeight + (Theme.spaceXl * 2)
+            anchors.centerIn: parent
+            radius: Theme.radiusLg
+            color: Theme.card
+            border.color: Theme.accent
+            border.width: 1
+
+            MouseArea {
+                anchors.fill: parent
+                // prevent click-through
+            }
+
+            ColumnLayout {
+                id: savePresetCol
+                anchors.fill: parent
+                anchors.margins: Theme.spaceXl
+                spacing: Theme.spaceMd
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceSm
+
+                    Rectangle {
+                        width: 32
+                        height: 32
+                        radius: Theme.radiusSm
+                        color: Qt.rgba(0.08, 0.72, 0.65, 0.15)
+                        border.color: Theme.accent
+                        border.width: 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: "💾"
+                            font.pixelSize: 16
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text {
+                            text: "Save Draft as Layout Preset"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeLg
+                            font.weight: Font.DemiBold
+                            color: Theme.textPrimary
+                        }
+                        Text {
+                            text: "Save configured panels, applets, and desktop widgets into a reusable preset"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            color: Theme.textMuted
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Theme.borderSubtle
+                }
+
+                // Preset Name input
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    Text { text: "Preset Name"; font.pixelSize: Theme.fontSizeXs; font.weight: Font.DemiBold; color: Theme.textSecondary }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 36
+                        radius: Theme.radiusSm
+                        color: Theme.surface
+                        border.color: presetNameInput.activeFocus ? Theme.accent : Theme.borderSubtle
+                        border.width: 1
+
+                        TextInput {
+                            id: presetNameInput
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSm
+                            color: Theme.textPrimary
+                            selectByMouse: true
+                            text: "My Custom Preset"
+                        }
+                    }
+                }
+
+                // Preset Description input
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    Text { text: "Description"; font.pixelSize: Theme.fontSizeXs; font.weight: Font.DemiBold; color: Theme.textSecondary }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 54
+                        radius: Theme.radiusSm
+                        color: Theme.surface
+                        border.color: presetDescInput.activeFocus ? Theme.accent : Theme.borderSubtle
+                        border.width: 1
+
+                        TextInput {
+                            id: presetDescInput
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSm
+                            color: Theme.textPrimary
+                            selectByMouse: true
+                            text: "Personal layout with customized panels and widget arrangement."
+                        }
+                    }
+                }
+
+                // Summary
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: summaryCol.implicitHeight + 16
+                    radius: Theme.radiusSm
+                    color: Qt.rgba(1, 1, 1, 0.03)
+                    border.color: Theme.borderSubtle
+                    border.width: 1
+
+                    ColumnLayout {
+                        id: summaryCol
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 4
+
+                        Text {
+                            text: "Included in Preset:"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXs
+                            font.weight: Font.DemiBold
+                            color: Theme.accentLight
+                        }
+                        Text {
+                            text: "• Top Panel: " + DesktopCtrl.panelPosition + " (" + DesktopCtrl.panelThickness + "px, " + DesktopCtrl.selectedPanelApplets.length + " applets)\n• Dock: " + DesktopCtrl.dockPosition + " (" + DesktopCtrl.dockThickness + "px)\n• Desktop Widgets: " + DesktopCtrl.desktopWidgets.length + " widget(s)"
+                            font.family: Theme.fontMono
+                            font.pixelSize: 11
+                            color: Theme.textSecondary
+                        }
+                    }
+                }
+
+                Item { height: Theme.spaceSm }
+
+                // Actions
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spaceMd
+
+                    Item { Layout.fillWidth: true }
+
+                    PFButton {
+                        text: "Cancel"
+                        variant: "secondary"
+                        size: "md"
+                        onClicked: desktopBuilderRoot.showSavePresetDialog = false
+                    }
+
+                    PFButton {
+                        text: "Save Preset"
+                        iconText: "💾"
+                        variant: "primary"
+                        size: "md"
+                        enabled: presetNameInput.text.trim().length > 0
+                        onClicked: {
+                            var ok = DesktopCtrl.saveDraftAsPreset("", presetNameInput.text.trim(), presetDescInput.text.trim())
+                            if (ok) {
+                                AppCtrl.showToast("Saved custom preset: " + presetNameInput.text.trim(), "success")
+                                desktopBuilderRoot.showSavePresetDialog = false
+                            } else {
+                                AppCtrl.showToast("Failed to save preset.", "error")
+                            }
+                        }
+                    }
                 }
             }
         }

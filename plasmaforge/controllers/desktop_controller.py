@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import datetime
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -21,10 +22,17 @@ from plasmaforge.core.desktop_inspector import (
 from plasmaforge.core.desktop_layout import (
     DesktopLayout,
     DesktopLayoutApplier,
+    PanelConfig,
     detect_desktop_layout,
     get_layout_presets,
 )
+from plasmaforge.core.layout_presets import (
+    LayoutPreset,
+    LayoutPresetManager,
+    get_curated_layout_presets,
+)
 from plasmaforge.core.transaction import TransactionResult, TransactionState
+from plasmaforge.core.widget_catalog import InstalledWidgetInfo, WidgetCatalogService
 
 
 class DesktopWorkerSignals(QObject):
@@ -32,6 +40,8 @@ class DesktopWorkerSignals(QObject):
 
     inspectionCompleted = Signal(object)  # LiveDesktopState
     inspectionFailed = Signal(str)
+    catalogCompleted = Signal(list, list)  # List[InstalledWidgetInfo], List[str]
+    catalogFailed = Signal(str)
 
 
 class DesktopController(QObject):
@@ -50,12 +60,19 @@ class DesktopController(QObject):
     proposedChangesChanged = Signal()
     selectedPanelChanged = Signal()
 
+    # Widget Catalog & Layout Presets signals
+    widgetCatalogChanged = Signal()
+    widgetCatalogLoadingChanged = Signal()
+    customPresetsChanged = Signal()
+
     def __init__(
         self,
         parent: QObject | None = None,
         inspector: Optional[DesktopLayoutInspector] = None,
         detector: Optional[DesktopEnvironmentDetector] = None,
         applier: Optional[DesktopLayoutApplier] = None,
+        catalog_service: Optional[WidgetCatalogService] = None,
+        preset_manager: Optional[LayoutPresetManager] = None,
     ) -> None:
         super().__init__(parent)
         self._config = get_config()
@@ -63,13 +80,21 @@ class DesktopController(QObject):
 
         self._detector = detector or DesktopEnvironmentDetector()
         self._inspector = inspector or DesktopLayoutInspector(detector=self._detector)
+        self._catalog_service = catalog_service or WidgetCatalogService()
+        self._preset_manager = preset_manager or LayoutPresetManager()
+
         self._applier = applier or DesktopLayoutApplier(
             backup_manager=self._backup_manager,
             safe_mode=self._config.safe_mode,
         )
 
-        self._presets = [p.to_dict() for p in get_layout_presets()]
+        self._presets = [p.to_dict() for p in self._preset_manager.list_presets()]
         self._selected_preset_id = ""
+
+        # Widget Catalog state
+        self._installed_widgets: List[InstalledWidgetInfo] = []
+        self._widget_categories: List[str] = ["All"]
+        self._is_catalog_loading = False
 
         # Live inspection state
         self._is_inspecting = False
@@ -108,9 +133,14 @@ class DesktopController(QObject):
         self._signals = DesktopWorkerSignals(self)
         self._signals.inspectionCompleted.connect(self._on_inspection_completed)
         self._signals.inspectionFailed.connect(self._on_inspection_failed)
+        self._signals.catalogCompleted.connect(self._on_catalog_completed)
+        self._signals.catalogFailed.connect(self._on_catalog_failed)
 
         # Wire draft changes to update proposed changes
         self.draftChanged.connect(self._recompute_proposed_changes)
+
+        # Kick off background widget catalog discovery
+        self.loadWidgetCatalog()
 
     def _format_timestamp(self, iso_str: str) -> str:
         """Format ISO timestamp to readable local time string."""
@@ -180,6 +210,41 @@ class DesktopController(QObject):
         self._is_inspecting = False
         self._live_state.status_message = f"Inspection error: {err_msg}"
         self.inspectionStateChanged.emit()
+
+    # ==========================================
+    # Widget Catalog Discovery
+    # ==========================================
+    @Slot()
+    def loadWidgetCatalog(self) -> None:
+        """Start asynchronous discovery of installed Plasma widgets."""
+        if self._is_catalog_loading:
+            return
+
+        self._is_catalog_loading = True
+        self.widgetCatalogLoadingChanged.emit()
+
+        def worker() -> None:
+            try:
+                widgets = self._catalog_service.get_installed_widgets(force_refresh=True)
+                categories = ["All"] + self._catalog_service.get_categories()
+                self._signals.catalogCompleted.emit(widgets, categories)
+            except Exception as e:
+                self._signals.catalogFailed.emit(str(e))
+
+        self._executor.submit(worker)
+
+    def _on_catalog_completed(self, widgets: List[InstalledWidgetInfo], categories: List[str]) -> None:
+        """Handle widget catalog completion on the GUI thread."""
+        self._installed_widgets = widgets
+        self._widget_categories = categories
+        self._is_catalog_loading = False
+        self.widgetCatalogLoadingChanged.emit()
+        self.widgetCatalogChanged.emit()
+
+    def _on_catalog_failed(self, err_msg: str) -> None:
+        """Handle widget catalog scan error."""
+        self._is_catalog_loading = False
+        self.widgetCatalogLoadingChanged.emit()
 
     def _recompute_proposed_changes(self) -> None:
         """Compare detected layout with current workbench draft."""
@@ -271,12 +336,43 @@ class DesktopController(QObject):
             d.top_panel.position != c.top_panel.position
             or d.top_panel.thickness != c.top_panel.thickness
             or d.top_panel.visibility != c.top_panel.visibility
+            or d.top_panel.applets != c.top_panel.applets
             or d.dock.position != c.dock.position
             or d.dock.thickness != c.dock.thickness
             or d.dock.icon_size != c.dock.icon_size
             or d.dock.visibility != c.dock.visibility
+            or d.dock.applets != c.dock.applets
+            or d.desktop_widgets != c.desktop_widgets
             or d.show_widgets != c.show_widgets
         )
+
+    # ------------------------------------------
+    # Widget Catalog & Presets Properties
+    # ------------------------------------------
+    @Property(bool, notify=widgetCatalogLoadingChanged)
+    def isCatalogLoading(self) -> bool:
+        return self._is_catalog_loading
+
+    @Property("QVariantList", notify=widgetCatalogChanged)
+    def installedWidgets(self) -> List[Dict[str, Any]]:
+        return [w.to_dict() for w in self._installed_widgets]
+
+    @Property("QVariantList", notify=widgetCatalogChanged)
+    def widgetCategories(self) -> List[str]:
+        return self._widget_categories
+
+    @Property("QVariantList", notify=customPresetsChanged)
+    def customPresets(self) -> List[Dict[str, Any]]:
+        return [p.to_dict() for p in self._preset_manager.list_presets() if not p.is_builtin]
+
+    @Property("QVariantList", notify=draftChanged)
+    def selectedPanelApplets(self) -> List[str]:
+        cfg = self._get_selected_draft_config()
+        return list(cfg.applets) if cfg else []
+
+    @Property("QVariantList", notify=draftChanged)
+    def desktopWidgets(self) -> List[str]:
+        return list(self._draft_layout.desktop_widgets)
 
     @Property(bool, notify=proposedChangesChanged)
     def hasProposedChanges(self) -> bool:
@@ -528,18 +624,146 @@ class DesktopController(QObject):
 
     @Slot(str)
     def loadPreset(self, preset_id: str) -> None:
-        """Load a curated preset into the editable draft workbench."""
-        for p in get_layout_presets():
-            if p.id == preset_id:
-                top_cid = self._detected_layout.top_panel.containment_id
-                dock_cid = self._detected_layout.dock.containment_id
+        """Load a curated or custom preset into the editable draft workbench."""
+        preset = self._preset_manager.get_preset(preset_id)
+        if preset:
+            top_cid = self._detected_layout.top_panel.containment_id
+            dock_cid = self._detected_layout.dock.containment_id
 
-                self._draft_layout = DesktopLayout.from_dict(p.to_dict())
-                self._draft_layout.top_panel.containment_id = top_cid
-                self._draft_layout.dock.containment_id = dock_cid
-                self._selected_preset_id = preset_id
-                self.draftChanged.emit()
-                break
+            self._draft_layout = preset.to_desktop_layout()
+            self._draft_layout.top_panel.containment_id = top_cid
+            self._draft_layout.dock.containment_id = dock_cid
+            self._selected_preset_id = preset_id
+            self.draftChanged.emit()
+
+    # ------------------------------------------
+    # Widget Placement & Management Slots
+    # ------------------------------------------
+    @Slot(str, str, str, result="QVariantList")
+    def searchWidgets(self, query: str = "", category: str = "", target: str = "") -> List[Dict[str, Any]]:
+        """Filter discovered widgets by query string, category, and target ('panel' or 'desktop')."""
+        results = self._catalog_service.search_widgets(
+            query=query,
+            category=category,
+            target=target,
+            widgets=self._installed_widgets if self._installed_widgets else None,
+        )
+        return [w.to_dict() for w in results]
+
+    def _resolve_draft_panel(self, containment_id: str = "") -> Optional[PanelConfig]:
+        """Resolve target draft panel config by ID or fall back to selected panel."""
+        if containment_id:
+            if containment_id in ("dock", "bottom") or containment_id == self._draft_layout.dock.containment_id:
+                return self._draft_layout.dock
+            if containment_id in ("top", "panel") or containment_id == self._draft_layout.top_panel.containment_id:
+                return self._draft_layout.top_panel
+            if self._draft_layout.top_panel.containment_id == containment_id:
+                return self._draft_layout.top_panel
+            if self._draft_layout.dock.containment_id == containment_id:
+                return self._draft_layout.dock
+        return self._get_selected_draft_config()
+
+    @Slot(str, str, result=bool)
+    def addAppletToDraft(self, containment_id: str, plugin_id: str) -> bool:
+        """Stage an applet addition into the specified or selected panel draft."""
+        if not plugin_id:
+            return False
+        panel = self._resolve_draft_panel(containment_id)
+        if panel is not None:
+            panel.applets.append(plugin_id)
+            self._selected_preset_id = "custom"
+            self.draftChanged.emit()
+            return True
+        return False
+
+    @Slot(str, int, result=bool)
+    def removeAppletFromDraft(self, containment_id: str, applet_index: int) -> bool:
+        """Stage an applet removal from the specified or selected panel draft."""
+        panel = self._resolve_draft_panel(containment_id)
+        if panel is not None and 0 <= applet_index < len(panel.applets):
+            panel.applets.pop(applet_index)
+            self._selected_preset_id = "custom"
+            self.draftChanged.emit()
+            return True
+        return False
+
+    @Slot(str, int, int, result=bool)
+    def moveAppletInDraft(self, containment_id: str, from_index: int, to_index: int) -> bool:
+        """Reorder applet in specified or selected panel draft."""
+        panel = self._resolve_draft_panel(containment_id)
+        if panel is not None and 0 <= from_index < len(panel.applets) and 0 <= to_index < len(panel.applets):
+            item = panel.applets.pop(from_index)
+            panel.applets.insert(to_index, item)
+            self._selected_preset_id = "custom"
+            self.draftChanged.emit()
+            return True
+        return False
+
+    @Slot(str, result=bool)
+    def addDesktopWidgetToDraft(self, plugin_id: str) -> bool:
+        """Stage a widget addition to desktop containments."""
+        if not plugin_id:
+            return False
+        self._draft_layout.desktop_widgets.append(plugin_id)
+        self._draft_layout.show_widgets = True
+        self._selected_preset_id = "custom"
+        self.draftChanged.emit()
+        return True
+
+    @Slot(int, result=bool)
+    def removeDesktopWidgetFromDraft(self, widget_index: int) -> bool:
+        """Stage a widget removal from desktop containments."""
+        if 0 <= widget_index < len(self._draft_layout.desktop_widgets):
+            self._draft_layout.desktop_widgets.pop(widget_index)
+            self._selected_preset_id = "custom"
+            self.draftChanged.emit()
+            return True
+        return False
+
+    # ------------------------------------------
+    # Custom Layout Presets Slots
+    # ------------------------------------------
+    @Slot(str, str, str, result=bool)
+    def saveDraftAsPreset(self, preset_id: str, name: str, description: str) -> bool:
+        """Save current draft layout as a custom preset."""
+        cleaned_id = preset_id.strip() or re.sub(r"[^a-z0-9_]+", "_", name.lower().strip())
+        cleaned_id = re.sub(r"[^a-z0-9_-]", "_", cleaned_id.lower()).strip("_")
+        if not cleaned_id:
+            cleaned_id = f"custom_preset_{int(datetime.datetime.now().timestamp())}"
+
+        preset = LayoutPreset.from_desktop_layout(
+            layout=self._draft_layout,
+            preset_id=cleaned_id,
+            name=name.strip() or "Custom Layout Preset",
+            description=description.strip() or "User saved desktop layout preset.",
+            author="User",
+        )
+        ok, msg = self._preset_manager.save_preset(preset, overwrite=True)
+        if ok:
+            self._presets = [p.to_dict() for p in self._preset_manager.list_presets()]
+            self._selected_preset_id = cleaned_id
+            self.customPresetsChanged.emit()
+            self.layoutChanged.emit()
+            return True
+        return False
+
+    @Slot(str, result=bool)
+    def deleteCustomPreset(self, preset_id: str) -> bool:
+        """Delete a saved custom layout preset."""
+        ok, msg = self._preset_manager.delete_preset(preset_id)
+        if ok:
+            self._presets = [p.to_dict() for p in self._preset_manager.list_presets()]
+            if self._selected_preset_id == preset_id:
+                self._selected_preset_id = ""
+            self.customPresetsChanged.emit()
+            self.layoutChanged.emit()
+            return True
+        return False
+
+    @Slot(str, result="QVariantList")
+    def checkPresetMissingWidgets(self, preset_id: str) -> List[str]:
+        """Check for missing widgets required by a preset."""
+        return self._preset_manager.check_missing_widgets(preset_id, self._catalog_service)
 
     @Slot("QVariantMap")
     def loadDraftFromDict(self, layout_dict: Dict[str, Any]) -> None:

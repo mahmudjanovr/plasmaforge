@@ -120,7 +120,7 @@ def test_theme_controller_workflow(qapp: QGuiApplication) -> None:
 
 def test_desktop_controller_workflow(qapp: QGuiApplication) -> None:
     ctrl = DesktopController()
-    assert len(ctrl.presets) == 3
+    assert len(ctrl.presets) >= 3
     assert ctrl.detectedLayout is not None
     assert ctrl.draftLayout is not None
     assert ctrl.isDraftModified is False
